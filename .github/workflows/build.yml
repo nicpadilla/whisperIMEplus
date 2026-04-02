@@ -33,5 +33,5 @@ jobs:
         if: success()
         with:
           name: debug-apk
-          path: app/build/outputs/apk/debug/*.apk
+          path: app/build/outputs/apk/**/*.apk
           retention-days: 14
