@@ -41,6 +41,7 @@ public class SettingsActivity extends AppCompatActivity {
     private CheckBox modeSimpleChineseIME;
     private String langCodeIME = "";
     private RangeSlider minSilence;
+    private CheckBox useBluetoothMic;
     private int langSelected;
 
     @SuppressLint("ClickableViewAccessibility")
@@ -198,6 +199,14 @@ public class SettingsActivity extends AppCompatActivity {
                 editor.putInt("silenceDurationMs", (int) value);
                 editor.apply();
             }
+        });
+
+        useBluetoothMic = findViewById(R.id.use_bluetooth_mic);
+        useBluetoothMic.setChecked(sp.getBoolean("useBluetoothMic", false));
+        useBluetoothMic.setOnCheckedChangeListener((compoundButton, isChecked) -> {
+            SharedPreferences.Editor editor = sp.edit();
+            editor.putBoolean("useBluetoothMic", isChecked);
+            editor.apply();
         });
 
         checkPermissions();

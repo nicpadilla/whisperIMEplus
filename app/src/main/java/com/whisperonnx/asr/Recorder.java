@@ -166,9 +166,9 @@ public class Recorder {
         int bufferSize = AudioRecord.getMinBufferSize(sampleRateInHz, channelConfig, audioFormat);
         if (bufferSize < VAD_FRAME_SIZE * 2) bufferSize = VAD_FRAME_SIZE * 2;
 
+        boolean useBluetoothMic = sp.getBoolean("useBluetoothMic", false);
         AudioManager audioManager = (AudioManager) mContext.getSystemService(Context.AUDIO_SERVICE);
-        audioManager.startBluetoothSco();
-        audioManager.setBluetoothScoOn(true);
+        configureBluetooth(audioManager, useBluetoothMic, true);
 
         AudioRecord.Builder builder = new AudioRecord.Builder()
                 .setAudioSource(audioSource)
@@ -239,8 +239,7 @@ public class Recorder {
         }
         audioRecord.stop();
         audioRecord.release();
-        audioManager.stopBluetoothSco();
-        audioManager.setBluetoothScoOn(false);
+        configureBluetooth(audioManager, useBluetoothMic, false);
 
         // Save recorded audio data to BufferStore (up to 30 seconds)
         RecordBuffer.setOutputBuffer(outputBuffer.toByteArray());
@@ -255,6 +254,19 @@ public class Recorder {
             fileSavedLock.notify(); // Notify that recording is finished
         }
 
+    }
+
+    // Package-private for testing
+    void configureBluetooth(AudioManager audioManager, boolean useBluetoothMic, boolean start) {
+        if (useBluetoothMic) {
+            if (start) {
+                audioManager.startBluetoothSco();
+                audioManager.setBluetoothScoOn(true);
+            } else {
+                audioManager.stopBluetoothSco();
+                audioManager.setBluetoothScoOn(false);
+            }
+        }
     }
 
 }

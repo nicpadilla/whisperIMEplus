@@ -29,4 +29,5 @@
     <string name="text_to_speech">טקסט לדיבור:</string>
     <string name="tts_language_not_supported">TTS: שפה לא נתמכת</string>
     <string name="tts_initialization_failed">TTS: האתחול נכשל</string>
+    <string name="settings_use_bluetooth_mic">השתמש במיקרופון בלוטות\':</string>
 </resources>

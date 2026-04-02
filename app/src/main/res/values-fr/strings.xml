@@ -29,4 +29,5 @@
     <string name="tts_initialization_failed">SV: Échec de l\'initialisation</string>
     <string name="auto_button">mode automatique</string>
     <string name="error_no_input">Aucune entrée vocale reçue</string>
+    <string name="settings_use_bluetooth_mic">Utiliser le microphone Bluetooth\u00a0:</string>
 </resources>

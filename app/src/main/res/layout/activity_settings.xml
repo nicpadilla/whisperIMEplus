@@ -180,6 +180,31 @@
                 android:valueTo = "3000"
                 android:stepSize = "100"
                 />
+
+            <LinearLayout
+                android:id="@+id/layout_use_bluetooth_mic"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:gravity="start">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:textSize="16sp"
+                    android:textColor="@color/colorAccent"
+                    android:text="@string/settings_use_bluetooth_mic" />
+
+                <CheckBox
+                    android:id="@+id/use_bluetooth_mic"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:minWidth="0dp"
+                    android:minHeight="0dp"
+                    android:contentDescription="@string/settings_use_bluetooth_mic"/>
+
+            </LinearLayout>
         </LinearLayout>
     </ScrollView>
 </androidx.coordinatorlayout.widget.CoordinatorLayout>

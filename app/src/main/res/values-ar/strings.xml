@@ -29,4 +29,5 @@
     <string name="tts_initialization_failed">تحويل النص إلى كلام: فشلت التهيئة</string>
     <string name="auto_button">الوضع التلقائي</string>
     <string name="error_no_input">لم يتم تلقي أي إدخال صوتي</string>
+    <string name="settings_use_bluetooth_mic">استخدام ميكروفون البلوتوث:</string>
 </resources>
