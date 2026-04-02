@@ -233,12 +233,11 @@
                 android:textSize="20dp"
                 android:text="@string/settings_word_replacements" />
 
-            <ListView
+            <LinearLayout
                 android:id="@+id/list_word_replacements"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:divider="@null"
-                android:dividerHeight="0dp" />
+                android:orientation="vertical" />
 
             <Button
                 android:id="@+id/btn_add_replacement"

@@ -17,9 +17,9 @@ import android.widget.Button;
 import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.ImageButton;
-import android.widget.ListAdapter;
-import android.widget.ListView;
+import android.widget.LinearLayout;
 import android.widget.Spinner;
+import android.widget.TextView;
 import android.widget.Toast;
 
 
@@ -33,8 +33,6 @@ import com.google.android.material.slider.RangeSlider;
 import com.whisperonnx.asr.WordReplacements;
 import com.whisperonnx.utils.LanguagePairAdapter;
 import com.whisperonnx.utils.ThemeUtils;
-import com.whisperonnx.utils.WordReplacementAdapter;
-
 import java.util.ArrayList;
 import java.util.List;
 
@@ -51,10 +49,8 @@ public class SettingsActivity extends AppCompatActivity {
     private RangeSlider minSilence;
     private RangeSlider maxRecordingDuration;
     private CheckBox useBluetoothMic;
-    private ListView listWordReplacements;
     private Button btnAddReplacement;
     private List<WordReplacements.Entry> wordReplacementEntries;
-    private WordReplacementAdapter wordReplacementAdapter;
     private int langSelected;
 
     @SuppressLint("ClickableViewAccessibility")
@@ -235,17 +231,10 @@ public class SettingsActivity extends AppCompatActivity {
         });
 
         // Word replacements
-        listWordReplacements = findViewById(R.id.list_word_replacements);
+        LinearLayout listWordReplacements = findViewById(R.id.list_word_replacements);
         btnAddReplacement = findViewById(R.id.btn_add_replacement);
         wordReplacementEntries = WordReplacements.load(sp);
-        wordReplacementAdapter = new WordReplacementAdapter(this, wordReplacementEntries, position -> {
-            wordReplacementEntries.remove(position);
-            WordReplacements.save(sp, wordReplacementEntries);
-            wordReplacementAdapter.notifyDataSetChanged();
-            setListViewHeightBasedOnChildren(listWordReplacements);
-        });
-        listWordReplacements.setAdapter(wordReplacementAdapter);
-        setListViewHeightBasedOnChildren(listWordReplacements);
+        refreshReplacementList(listWordReplacements);
 
         btnAddReplacement.setOnClickListener(v -> {
             View dialogView = getLayoutInflater().inflate(R.layout.dialog_add_replacement, null);
@@ -261,8 +250,7 @@ public class SettingsActivity extends AppCompatActivity {
                         if (!from.isEmpty() && !to.isEmpty()) {
                             wordReplacementEntries.add(new WordReplacements.Entry(from, to));
                             WordReplacements.save(sp, wordReplacementEntries);
-                            wordReplacementAdapter.notifyDataSetChanged();
-                            setListViewHeightBasedOnChildren(listWordReplacements);
+                            refreshReplacementList(listWordReplacements);
                         }
                     })
                     .setNegativeButton(android.R.string.cancel, null)
@@ -273,23 +261,22 @@ public class SettingsActivity extends AppCompatActivity {
 
     }
 
-    private static void setListViewHeightBasedOnChildren(ListView listView) {
-        ListAdapter adapter = listView.getAdapter();
-        if (adapter == null) return;
-
-        int totalHeight = 0;
-        for (int i = 0; i < adapter.getCount(); i++) {
-            View listItem = adapter.getView(i, null, listView);
-            listItem.measure(
-                    View.MeasureSpec.makeMeasureSpec(listView.getWidth(), View.MeasureSpec.UNSPECIFIED),
-                    View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
-            totalHeight += listItem.getMeasuredHeight();
+    private void refreshReplacementList(LinearLayout container) {
+        container.removeAllViews();
+        for (int i = 0; i < wordReplacementEntries.size(); i++) {
+            final int index = i;
+            WordReplacements.Entry entry = wordReplacementEntries.get(i);
+            View row = getLayoutInflater().inflate(R.layout.item_word_replacement, container, false);
+            TextView tvEntry = row.findViewById(R.id.tv_replacement_entry);
+            ImageButton btnDelete = row.findViewById(R.id.btn_delete_replacement);
+            tvEntry.setText(entry.from + "  \u2192  " + entry.to);
+            btnDelete.setOnClickListener(v -> {
+                wordReplacementEntries.remove(index);
+                WordReplacements.save(sp, wordReplacementEntries);
+                refreshReplacementList(container);
+            });
+            container.addView(row);
         }
-
-        ViewGroup.LayoutParams params = listView.getLayoutParams();
-        params.height = totalHeight + (listView.getDividerHeight() * (adapter.getCount() - 1));
-        listView.setLayoutParams(params);
-        listView.requestLayout();
     }
 
     private void checkPermissions() {
