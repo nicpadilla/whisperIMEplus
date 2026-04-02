@@ -227,7 +227,7 @@ public class Whisper {
 
             if (segmentResult != null) {
                 String text = segmentResult.getResult().trim();
-                if (!text.isEmpty()) {
+                if (!text.isEmpty() && !text.equals(Recognizer.UNDEFINED_TEXT)) {
                     if (accumulatedText.length() > 0) {
                         accumulatedText.append(" ");
                     }
