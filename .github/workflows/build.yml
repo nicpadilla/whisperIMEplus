@@ -28,10 +28,13 @@ jobs:
       - name: Run unit tests
         run: ./gradlew test
 
+      - name: Find APK
+        run: find app/build/outputs -name "*.apk" -type f 2>/dev/null || echo "No APK files found"
+
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
         if: success()
         with:
           name: debug-apk
-          path: app/build/outputs/apk/**/*.apk
+          path: app/build/outputs/
           retention-days: 14
