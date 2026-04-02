@@ -15,8 +15,11 @@ public class RecordBuffer {
     private static final int MAX_SAMPLES_PER_SEGMENT = 16000 * 30;
     // Max bytes per segment: 30 seconds at 16kHz, 16-bit mono
     private static final int MAX_BYTES_PER_SEGMENT = MAX_SAMPLES_PER_SEGMENT * 2;
-    // Min samples per segment: 0.3 seconds at 16kHz
+    // Min samples for VAD-split segments: 0.3 seconds at 16kHz
     private static final int MIN_SAMPLES_PER_SEGMENT = 16000 * 3 / 10;
+    // Min samples for hard-split trailing chunks: 5 seconds at 16kHz
+    // Short trailing chunks from hard splits produce poor transcription
+    private static final int MIN_SAMPLES_HARD_SPLIT = 16000 * 5;
 
     // Synchronized method to set the byte array
     public static synchronized void setOutputBuffer(byte[] buffer) {
@@ -69,7 +72,9 @@ public class RecordBuffer {
                 while (pos < end) {
                     int chunkEnd = Math.min(pos + MAX_BYTES_PER_SEGMENT, end);
                     int chunkSamples = (chunkEnd - pos) / 2;
-                    if (chunkSamples >= MIN_SAMPLES_PER_SEGMENT) {
+                    boolean isTrailingChunk = (chunkEnd == end && pos > start);
+                    int minRequired = isTrailingChunk ? MIN_SAMPLES_HARD_SPLIT : MIN_SAMPLES_PER_SEGMENT;
+                    if (chunkSamples >= minRequired) {
                         ranges.add(new int[]{pos, chunkEnd});
                     }
                     pos = chunkEnd;
