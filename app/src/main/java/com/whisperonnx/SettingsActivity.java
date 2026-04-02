@@ -41,6 +41,7 @@ public class SettingsActivity extends AppCompatActivity {
     private CheckBox modeSimpleChineseIME;
     private String langCodeIME = "";
     private RangeSlider minSilence;
+    private RangeSlider maxRecordingDuration;
     private CheckBox useBluetoothMic;
     private int langSelected;
 
@@ -197,6 +198,18 @@ public class SettingsActivity extends AppCompatActivity {
             public void onValueChange(@NonNull RangeSlider slider, float value, boolean fromUser) {
                 SharedPreferences.Editor editor = sp.edit();
                 editor.putInt("silenceDurationMs", (int) value);
+                editor.apply();
+            }
+        });
+
+        maxRecordingDuration = findViewById(R.id.settings_max_recording_duration);
+        float maxDuration = sp.getInt("maxRecordingSeconds", 120);
+        maxRecordingDuration.setValues(maxDuration);
+        maxRecordingDuration.addOnChangeListener(new RangeSlider.OnChangeListener() {
+            @Override
+            public void onValueChange(@NonNull RangeSlider slider, float value, boolean fromUser) {
+                SharedPreferences.Editor editor = sp.edit();
+                editor.putInt("maxRecordingSeconds", (int) value);
                 editor.apply();
             }
         });

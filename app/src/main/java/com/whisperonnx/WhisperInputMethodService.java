@@ -53,6 +53,9 @@ public class WhisperInputMethodService extends InputMethodService {
     private static boolean translate = false;
     private boolean modeAuto = false;
     private RelativeLayout layoutButtons;
+    private boolean toggleRecording = false;
+    private long recordDownTime = 0;
+    private static final long TAP_THRESHOLD_MS = 300;
 
     @Override
     public void onCreate() {
@@ -137,10 +140,12 @@ public class WhisperInputMethodService extends InputMethodService {
                 if (message.equals(Recorder.MSG_RECORDING)) {
                     handler.post(() -> btnRecord.setBackgroundResource(R.drawable.rounded_button_background_pressed));
                 } else if (message.equals(Recorder.MSG_RECORDING_DONE)) {
+                    toggleRecording = false;
                     HapticFeedback.vibrate(mContext);
                     handler.post(() -> btnRecord.setBackgroundResource(R.drawable.rounded_button_background));
                     startTranscription();
                 } else if (message.equals(Recorder.MSG_RECORDING_ERROR)) {
+                    toggleRecording = false;
                     HapticFeedback.vibrate(mContext);
                     if (countDownTimer!=null) { countDownTimer.cancel();}
                     handler.post(() -> {
@@ -159,10 +164,11 @@ public class WhisperInputMethodService extends InputMethodService {
             HapticFeedback.vibrate(this);
             startRecording();
             handler.post(() -> processingBar.setProgress(100));
-            countDownTimer = new CountDownTimer(30000, 1000) {
+            long maxDurationMsAuto = sp.getInt("maxRecordingSeconds", 120) * 1000L;
+            countDownTimer = new CountDownTimer(maxDurationMsAuto, 1000) {
                 @Override
                 public void onTick(long l) {
-                    handler.post(() -> processingBar.setProgress((int) (l / 300)));
+                    handler.post(() -> processingBar.setProgress((int) (l * 100 / maxDurationMsAuto)));
                 }
                 @Override
                 public void onFinish() {}
@@ -216,38 +222,57 @@ public class WhisperInputMethodService extends InputMethodService {
 
         btnRecord.setOnTouchListener((v, event) -> {
             if (event.getAction() == MotionEvent.ACTION_DOWN) {
-                // Pressed
-                handler.post(() -> btnRecord.setBackgroundResource(R.drawable.rounded_button_background_pressed));
-                if (checkRecordPermission()){
-                    if (!mWhisper.isInProgress()) {
-                        HapticFeedback.vibrate(this);
-                        startRecording();
-                        handler.post(() -> processingBar.setProgress(100));
-                        countDownTimer = new CountDownTimer(30000, 1000) {
-                            @Override
-                            public void onTick(long l) {
-                                handler.post(() -> processingBar.setProgress((int) (l / 300)));
-                            }
-                            @Override
-                            public void onFinish() {}
-                        };
-                        countDownTimer.start();
-                        handler.post(() -> {
-                            tvStatus.setText("");
-                            tvStatus.setVisibility(View.GONE);
-                        });
-                    } else {
-                        handler.post(() -> {
-                            tvStatus.setText(getString(R.string.please_wait));
-                            tvStatus.setVisibility(View.VISIBLE);
-                        });
+                recordDownTime = System.currentTimeMillis();
+                // If toggle-recording is active, a tap will stop it (handled in ACTION_UP)
+                if (!toggleRecording) {
+                    // Pressed - start recording (press-and-hold or will become toggle)
+                    handler.post(() -> btnRecord.setBackgroundResource(R.drawable.rounded_button_background_pressed));
+                    if (checkRecordPermission()){
+                        if (!mWhisper.isInProgress()) {
+                            HapticFeedback.vibrate(this);
+                            startRecording();
+                            handler.post(() -> processingBar.setProgress(100));
+                            long maxDurationMs = sp.getInt("maxRecordingSeconds", 120) * 1000L;
+                            countDownTimer = new CountDownTimer(maxDurationMs, 1000) {
+                                @Override
+                                public void onTick(long l) {
+                                    handler.post(() -> processingBar.setProgress((int) (l * 100 / maxDurationMs)));
+                                }
+                                @Override
+                                public void onFinish() {}
+                            };
+                            countDownTimer.start();
+                            handler.post(() -> {
+                                tvStatus.setText("");
+                                tvStatus.setVisibility(View.GONE);
+                            });
+                        } else {
+                            handler.post(() -> {
+                                tvStatus.setText(getString(R.string.please_wait));
+                                tvStatus.setVisibility(View.VISIBLE);
+                            });
+                        }
                     }
                 }
             } else if (event.getAction() == MotionEvent.ACTION_UP) {
-                // Released
-                handler.post(() -> btnRecord.setBackgroundResource(R.drawable.rounded_button_background));
-                if (mRecorder != null && mRecorder.isInProgress()) {
-                    mRecorder.stop();
+                long elapsed = System.currentTimeMillis() - recordDownTime;
+                if (toggleRecording) {
+                    // Second tap: stop toggle-recording
+                    toggleRecording = false;
+                    handler.post(() -> btnRecord.setBackgroundResource(R.drawable.rounded_button_background));
+                    if (mRecorder != null && mRecorder.isInProgress()) {
+                        mRecorder.stop();
+                    }
+                } else if (elapsed < TAP_THRESHOLD_MS) {
+                    // Short tap: enter toggle mode (recording already started in ACTION_DOWN)
+                    toggleRecording = true;
+                    // Keep button in pressed state - don't stop recording
+                } else {
+                    // Long press released: stop recording (original behavior)
+                    handler.post(() -> btnRecord.setBackgroundResource(R.drawable.rounded_button_background));
+                    if (mRecorder != null && mRecorder.isInProgress()) {
+                        mRecorder.stop();
+                    }
                 }
             }
             return true;

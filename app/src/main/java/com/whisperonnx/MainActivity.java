@@ -76,6 +76,9 @@ public class MainActivity extends AppCompatActivity {
     private CountDownTimer countDownTimer;
     private long startTime = 0;
     private TextToSpeech tts;
+    private boolean toggleRecording = false;
+    private long recordDownTime = 0;
+    private static final long TAP_THRESHOLD_MS = 300;
 
     @Override
     protected void onDestroy() {
@@ -164,30 +167,47 @@ public class MainActivity extends AppCompatActivity {
 
         btnRecord.setOnTouchListener((v, event) -> {
             if (event.getAction() == MotionEvent.ACTION_DOWN) {
-                // Pressed
-                runOnUiThread(() -> btnRecord.setBackgroundResource(R.drawable.rounded_button_background_pressed));
-                Log.d(TAG, "Start recording...");
-                if (!mWhisper.isInProgress()) {
-                    HapticFeedback.vibrate(this);
-                    startRecording();
-                    runOnUiThread(() -> processingBar.setProgress(100));
-                    countDownTimer = new CountDownTimer(30000, 1000) {
-                        @Override
-                        public void onTick(long l) {
-                            runOnUiThread(() -> processingBar.setProgress((int) (l / 300)));
-                        }
-                        @Override
-                        public void onFinish() {}
-                    };
-                    countDownTimer.start();
-                } else (Toast.makeText(this,getString(R.string.please_wait),Toast.LENGTH_SHORT)).show();
-
+                recordDownTime = System.currentTimeMillis();
+                if (!toggleRecording) {
+                    // Pressed - start recording
+                    runOnUiThread(() -> btnRecord.setBackgroundResource(R.drawable.rounded_button_background_pressed));
+                    Log.d(TAG, "Start recording...");
+                    if (!mWhisper.isInProgress()) {
+                        HapticFeedback.vibrate(this);
+                        startRecording();
+                        runOnUiThread(() -> processingBar.setProgress(100));
+                        long maxDurationMs = sp.getInt("maxRecordingSeconds", 120) * 1000L;
+                        countDownTimer = new CountDownTimer(maxDurationMs, 1000) {
+                            @Override
+                            public void onTick(long l) {
+                                runOnUiThread(() -> processingBar.setProgress((int) (l * 100 / maxDurationMs)));
+                            }
+                            @Override
+                            public void onFinish() {}
+                        };
+                        countDownTimer.start();
+                    } else (Toast.makeText(this,getString(R.string.please_wait),Toast.LENGTH_SHORT)).show();
+                }
             } else if (event.getAction() == MotionEvent.ACTION_UP) {
-                // Released
-                runOnUiThread(() -> btnRecord.setBackgroundResource(R.drawable.rounded_button_background));
-                if (mRecorder != null && mRecorder.isInProgress()) {
-                    Log.d(TAG, "Recording is in progress... stopping...");
-                    stopRecording();
+                long elapsed = System.currentTimeMillis() - recordDownTime;
+                if (toggleRecording) {
+                    // Second tap: stop toggle-recording
+                    toggleRecording = false;
+                    runOnUiThread(() -> btnRecord.setBackgroundResource(R.drawable.rounded_button_background));
+                    if (mRecorder != null && mRecorder.isInProgress()) {
+                        Log.d(TAG, "Toggle recording stopped");
+                        stopRecording();
+                    }
+                } else if (elapsed < TAP_THRESHOLD_MS) {
+                    // Short tap: enter toggle mode
+                    toggleRecording = true;
+                } else {
+                    // Long press released: stop recording
+                    runOnUiThread(() -> btnRecord.setBackgroundResource(R.drawable.rounded_button_background));
+                    if (mRecorder != null && mRecorder.isInProgress()) {
+                        Log.d(TAG, "Recording is in progress... stopping...");
+                        stopRecording();
+                    }
                 }
             }
             return true;
@@ -225,12 +245,14 @@ public class MainActivity extends AppCompatActivity {
                     if (!append.isChecked()) runOnUiThread(() -> tvResult.setText(""));
                     runOnUiThread(() -> btnRecord.setBackgroundResource(R.drawable.rounded_button_background_pressed));
                 } else if (message.equals(Recorder.MSG_RECORDING_DONE)) {
+                    toggleRecording = false;
                     HapticFeedback.vibrate(mContext);
                     runOnUiThread(() -> btnRecord.setBackgroundResource(R.drawable.rounded_button_background));
 
                     if (translate.isChecked()) startProcessing(ACTION_TRANSLATE);
                     else startProcessing(ACTION_TRANSCRIBE);
                 } else if (message.equals(Recorder.MSG_RECORDING_ERROR)) {
+                    toggleRecording = false;
                     HapticFeedback.vibrate(mContext);
                     if (countDownTimer!=null) { countDownTimer.cancel();}
                     runOnUiThread(() -> {

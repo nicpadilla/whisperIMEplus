@@ -42,7 +42,8 @@ To get the most out of Whisper+, follow these simple tips:
 - Press and hold the button while speaking or use automatic mode where available
 - Pause briefly before starting to speak
 - Speak clearly, loudly, and at a moderate pace
-- Please note that there is a limit of 30s for each recording
+- Recording duration is configurable (default 120s, max 300s). Longer recordings are automatically split into segments at natural speech pauses for processing
+- Quick tap the mic button to toggle recording on/off (for longer recordings); press and hold for the classic behavior
 
 By following these guidelines, you'll be able to enjoy accurate and efficient voice recognition with Whisper.
 

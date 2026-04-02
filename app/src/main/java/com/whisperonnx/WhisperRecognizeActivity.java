@@ -43,6 +43,9 @@ public class WhisperRecognizeActivity extends AppCompatActivity {
     private Context mContext;
     private CountDownTimer countDownTimer;
     private boolean modeAuto = false;
+    private boolean toggleRecording = false;
+    private long recordDownTime = 0;
+    private static final long TAP_THRESHOLD_MS = 300;
 
     @SuppressLint("ClickableViewAccessibility")
     @Override
@@ -88,10 +91,12 @@ public class WhisperRecognizeActivity extends AppCompatActivity {
                 if (message.equals(Recorder.MSG_RECORDING)) {
                     runOnUiThread(() -> btnRecord.setBackgroundResource(R.drawable.rounded_button_background_pressed));
                 } else if (message.equals(Recorder.MSG_RECORDING_DONE)) {
+                    toggleRecording = false;
                     HapticFeedback.vibrate(mContext);
                     runOnUiThread(() -> btnRecord.setBackgroundResource(R.drawable.rounded_button_background));
                     startTranscription();
                 } else if (message.equals(Recorder.MSG_RECORDING_ERROR)) {
+                    toggleRecording = false;
                     HapticFeedback.vibrate(mContext);
                     if (countDownTimer!=null) { countDownTimer.cancel();}
                     runOnUiThread(() -> {
@@ -109,10 +114,11 @@ public class WhisperRecognizeActivity extends AppCompatActivity {
             HapticFeedback.vibrate(this);
             startRecording();
             runOnUiThread(() -> processingBar.setProgress(100));
-            countDownTimer = new CountDownTimer(30000, 1000) {
+            long maxDurationMsAuto = sp.getInt("maxRecordingSeconds", 120) * 1000L;
+            countDownTimer = new CountDownTimer(maxDurationMsAuto, 1000) {
                 @Override
                 public void onTick(long l) {
-                    runOnUiThread(() -> processingBar.setProgress((int) (l / 300)));
+                    runOnUiThread(() -> processingBar.setProgress((int) (l * 100 / maxDurationMsAuto)));
                 }
                 @Override
                 public void onFinish() {}
@@ -134,31 +140,48 @@ public class WhisperRecognizeActivity extends AppCompatActivity {
 
         btnRecord.setOnTouchListener((v, event) -> {
             if (event.getAction() == MotionEvent.ACTION_DOWN) {
-                // Pressed
-                runOnUiThread(() -> btnRecord.setBackgroundResource(R.drawable.rounded_button_background_pressed));
-                if (checkRecordPermission()){
-                    if (!mWhisper.isInProgress()) {
-                        HapticFeedback.vibrate(this);
-                        startRecording();
-                        runOnUiThread(() -> processingBar.setProgress(100));
-                        countDownTimer = new CountDownTimer(30000, 1000) {
-                            @Override
-                            public void onTick(long l) {
-                                runOnUiThread(() -> processingBar.setProgress((int) (l / 300)));
-                            }
-                            @Override
-                            public void onFinish() {}
-                        };
-                        countDownTimer.start();
-                    } else {
-                        runOnUiThread(() -> Toast.makeText(this, getString(R.string.please_wait),Toast.LENGTH_SHORT).show());
+                recordDownTime = System.currentTimeMillis();
+                if (!toggleRecording) {
+                    // Pressed - start recording
+                    runOnUiThread(() -> btnRecord.setBackgroundResource(R.drawable.rounded_button_background_pressed));
+                    if (checkRecordPermission()){
+                        if (!mWhisper.isInProgress()) {
+                            HapticFeedback.vibrate(this);
+                            startRecording();
+                            runOnUiThread(() -> processingBar.setProgress(100));
+                            long maxDurationMs = sp.getInt("maxRecordingSeconds", 120) * 1000L;
+                            countDownTimer = new CountDownTimer(maxDurationMs, 1000) {
+                                @Override
+                                public void onTick(long l) {
+                                    runOnUiThread(() -> processingBar.setProgress((int) (l * 100 / maxDurationMs)));
+                                }
+                                @Override
+                                public void onFinish() {}
+                            };
+                            countDownTimer.start();
+                        } else {
+                            runOnUiThread(() -> Toast.makeText(this, getString(R.string.please_wait),Toast.LENGTH_SHORT).show());
+                        }
                     }
                 }
             } else if (event.getAction() == MotionEvent.ACTION_UP) {
-                // Released
-                runOnUiThread(() -> btnRecord.setBackgroundResource(R.drawable.rounded_button_background));
-                if (mRecorder != null && mRecorder.isInProgress()) {
-                    mRecorder.stop();
+                long elapsed = System.currentTimeMillis() - recordDownTime;
+                if (toggleRecording) {
+                    // Second tap: stop toggle-recording
+                    toggleRecording = false;
+                    runOnUiThread(() -> btnRecord.setBackgroundResource(R.drawable.rounded_button_background));
+                    if (mRecorder != null && mRecorder.isInProgress()) {
+                        mRecorder.stop();
+                    }
+                } else if (elapsed < TAP_THRESHOLD_MS) {
+                    // Short tap: enter toggle mode
+                    toggleRecording = true;
+                } else {
+                    // Long press released: stop recording
+                    runOnUiThread(() -> btnRecord.setBackgroundResource(R.drawable.rounded_button_background));
+                    if (mRecorder != null && mRecorder.isInProgress()) {
+                        mRecorder.stop();
+                    }
                 }
             }
             return true;

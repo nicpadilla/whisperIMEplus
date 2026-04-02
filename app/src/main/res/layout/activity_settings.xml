@@ -181,6 +181,25 @@
                 android:stepSize = "100"
                 />
 
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:gravity="center_vertical"
+                android:textSize="16sp"
+                android:textColor="@color/colorAccent"
+                android:text="@string/settings_max_recording_duration" />
+
+            <com.google.android.material.slider.RangeSlider
+                android:id="@+id/settings_max_recording_duration"
+                android:layout_width="wrap_content"
+                android:layout_height="8sp"
+                android:gravity="center_vertical"
+                android:valueFrom = "30"
+                android:valueTo = "300"
+                android:stepSize = "30"
+                />
+
             <LinearLayout
                 android:id="@+id/layout_use_bluetooth_mic"
                 android:layout_width="match_parent"

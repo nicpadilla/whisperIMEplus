@@ -12,6 +12,7 @@ import com.whisperonnx.voice_translation.neural_networks.voice.Recognizer;
 import com.whisperonnx.voice_translation.neural_networks.voice.RecognizerListener;
 
 import java.io.File;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.Lock;
@@ -40,6 +41,10 @@ public class Whisper {
     private Recognizer recognizer = null;
     private Context mContext;
     private long startTime;
+
+    // Multi-segment synchronization
+    private volatile CountDownLatch segmentLatch;
+    private volatile WhisperResult segmentResult;
 
     public Whisper(Context context) {
         mContext = context;
@@ -93,18 +98,28 @@ public class Whisper {
             @Override
             public void onSpeechRecognizedResult(String text, String languageCode, double confidenceScore, boolean isFinal) {
                 Log.d(TAG, languageCode + " " + text);
-                WhisperResult whisperResult = new WhisperResult(text,languageCode, mAction);
+                WhisperResult whisperResult = new WhisperResult(text, languageCode, mAction);
 
-                sendResult(whisperResult);
-
-                long timeTaken = System.currentTimeMillis() - startTime;
-                Log.d(TAG, "Time Taken for transcription: " + timeTaken + "ms");
-                sendUpdate(MSG_PROCESSING_DONE);
+                if (segmentLatch != null) {
+                    // Multi-segment mode: store result and signal
+                    segmentResult = whisperResult;
+                    segmentLatch.countDown();
+                } else {
+                    // Single-segment mode: deliver immediately
+                    sendResult(whisperResult);
+                    long timeTaken = System.currentTimeMillis() - startTime;
+                    Log.d(TAG, "Time Taken for transcription: " + timeTaken + "ms");
+                    sendUpdate(MSG_PROCESSING_DONE);
+                }
             }
 
             @Override
             public void onError(int[] reasons, long value) {
                 Log.d(TAG, "ERROR during recognition");
+                if (segmentLatch != null) {
+                    segmentResult = null;
+                    segmentLatch.countDown();
+                }
             }
         });
     }
@@ -167,7 +182,15 @@ public class Whisper {
             if (RecordBuffer.getOutputBuffer() != null) {
                 startTime = System.currentTimeMillis();
                 sendUpdate(MSG_PROCESSING);
-                recognizer.recognize(RecordBuffer.getSamples(),1, mLangCode, mAction );
+
+                int segmentCount = RecordBuffer.getSegmentCount();
+                if (segmentCount <= 1) {
+                    // Single segment: use existing behavior (backward compatible)
+                    recognizer.recognize(RecordBuffer.getSamples(), 1, mLangCode, mAction);
+                } else {
+                    // Multi-segment: process each segment sequentially
+                    processMultipleSegments(segmentCount);
+                }
             } else {
                 sendUpdate("Engine not initialized or file path not set");
             }
@@ -177,6 +200,54 @@ public class Whisper {
         } finally {
             mInProgress.set(false);
         }
+    }
+
+    private void processMultipleSegments(int segmentCount) {
+        StringBuilder accumulatedText = new StringBuilder();
+        String detectedLanguage = mLangCode;
+
+        for (int i = 0; i < segmentCount; i++) {
+            sendUpdate("Processing segment " + (i + 1) + " of " + segmentCount + "...");
+
+            float[] segmentSamples = RecordBuffer.getSegmentSamples(i);
+            if (segmentSamples == null || segmentSamples.length == 0) continue;
+
+            // Set up latch for this segment
+            segmentLatch = new CountDownLatch(1);
+            segmentResult = null;
+
+            recognizer.recognize(segmentSamples, 1, mLangCode, mAction);
+
+            try {
+                segmentLatch.await(); // Wait for callback
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                break;
+            }
+
+            if (segmentResult != null) {
+                String text = segmentResult.getResult().trim();
+                if (!text.isEmpty()) {
+                    if (accumulatedText.length() > 0) {
+                        accumulatedText.append(" ");
+                    }
+                    accumulatedText.append(text);
+                }
+                detectedLanguage = segmentResult.getLanguage();
+            }
+        }
+
+        // Clean up
+        segmentLatch = null;
+        segmentResult = null;
+
+        // Send accumulated result
+        WhisperResult finalResult = new WhisperResult(accumulatedText.toString(), detectedLanguage, mAction);
+        sendResult(finalResult);
+
+        long timeTaken = System.currentTimeMillis() - startTime;
+        Log.d(TAG, "Time Taken for multi-segment transcription (" + segmentCount + " segments): " + timeTaken + "ms");
+        sendUpdate(MSG_PROCESSING_DONE);
     }
 
     private void sendUpdate(String message) {

@@ -21,6 +21,8 @@ import com.konovalov.vad.webrtc.config.SampleRate;
 import com.whisperonnx.R;
 
 import java.io.ByteArrayOutputStream;
+import java.util.ArrayList;
+import java.util.List;
 
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.Condition;
@@ -49,8 +51,7 @@ public class Recorder {
     private final Object fileSavedLock = new Object(); // Lock object for wait/notify
 
     private volatile boolean shouldStartRecording = false;
-    private boolean useVAD = false;
-    private VadWebRTC vad = null;
+    private boolean autoStopOnSilence = false;
     private static final int VAD_FRAME_SIZE = 480;
     private SharedPreferences sp;
 
@@ -85,16 +86,8 @@ public class Recorder {
     }
 
     public void initVad(){
-        int silenceDurationMs = sp.getInt("silenceDurationMs", 800);
-        vad = Vad.builder()
-                .setSampleRate(SampleRate.SAMPLE_RATE_16K)
-                .setFrameSize(FrameSize.FRAME_SIZE_480)
-                .setMode(Mode.VERY_AGGRESSIVE)
-                .setSilenceDurationMs(silenceDurationMs)
-                .setSpeechDurationMs(200)
-                .build();
-        useVAD = true;
-        Log.d(TAG, "VAD initialized");
+        autoStopOnSilence = true;
+        Log.d(TAG, "Auto-stop on silence enabled");
     }
 
 
@@ -182,67 +175,94 @@ public class Recorder {
         AudioRecord audioRecord = builder.build();
         audioRecord.startRecording();
 
-        // Calculate maximum byte counts for 30 seconds (for saving)
-        int bytesForThirtySeconds = sampleRateInHz * bytesPerSample * channels * 30;
+        // Configurable max recording duration (default 120 seconds)
+        int maxRecordingSeconds = sp.getInt("maxRecordingSeconds", 120);
+        int maxBytes = sampleRateInHz * bytesPerSample * channels * maxRecordingSeconds;
 
         ByteArrayOutputStream outputBuffer = new ByteArrayOutputStream(); // Buffer for saving data RecordBuffer
 
         byte[] audioData = new byte[bufferSize];
         int totalBytesRead = 0;
 
-        boolean isSpeech;
-        boolean isRecording = false;
+        // Always create VAD for segment boundary tracking
+        int silenceDurationMs = sp.getInt("silenceDurationMs", 800);
+        VadWebRTC vad = Vad.builder()
+                .setSampleRate(SampleRate.SAMPLE_RATE_16K)
+                .setFrameSize(FrameSize.FRAME_SIZE_480)
+                .setMode(Mode.VERY_AGGRESSIVE)
+                .setSilenceDurationMs(silenceDurationMs)
+                .setSpeechDurationMs(200)
+                .build();
+
+        List<Integer> segmentBoundaries = new ArrayList<>();
+        boolean speechActive = false;
+        boolean recordingStarted = false;
         byte[] vadAudioBuffer = new byte[VAD_FRAME_SIZE * 2];  //VAD needs 16 bit
 
-        while (mInProgress.get() && totalBytesRead < bytesForThirtySeconds) {
+        while (mInProgress.get() && totalBytesRead < maxBytes) {
             int bytesRead = audioRecord.read(audioData, 0, VAD_FRAME_SIZE * 2);
             if (bytesRead > 0) {
-                outputBuffer.write(audioData, 0, bytesRead);  // Save all bytes read up to 30 seconds
+                outputBuffer.write(audioData, 0, bytesRead);
                 totalBytesRead += bytesRead;
             } else {
                 Log.d(TAG, "AudioRecord error, bytes read: " + bytesRead);
                 break;
             }
 
-            if (useVAD){
-                byte[] outputBufferByteArray = outputBuffer.toByteArray();
-                if (outputBufferByteArray.length >= VAD_FRAME_SIZE * 2) {
-                    // Always use the last VAD_FRAME_SIZE * 2 bytes (16 bit) from outputBuffer for VAD
-                    System.arraycopy(outputBufferByteArray, outputBufferByteArray.length - VAD_FRAME_SIZE * 2, vadAudioBuffer, 0, VAD_FRAME_SIZE * 2);
+            // VAD processing for segment boundary tracking
+            byte[] outputBufferByteArray = outputBuffer.toByteArray();
+            if (outputBufferByteArray.length >= VAD_FRAME_SIZE * 2) {
+                // Always use the last VAD_FRAME_SIZE * 2 bytes (16 bit) from outputBuffer for VAD
+                System.arraycopy(outputBufferByteArray, outputBufferByteArray.length - VAD_FRAME_SIZE * 2, vadAudioBuffer, 0, VAD_FRAME_SIZE * 2);
 
-                    isSpeech = vad.isSpeech(vadAudioBuffer);
-                    if (isSpeech) {
-                        if (!isRecording) {
-                            Log.d(TAG, "VAD Speech detected: recording starts");
+                boolean isSpeech = vad.isSpeech(vadAudioBuffer);
+
+                if (isSpeech) {
+                    if (!speechActive) {
+                        Log.d(TAG, "VAD Speech detected");
+                        if (autoStopOnSilence) {
                             sendUpdate(MSG_RECORDING);
                         }
-                        isRecording = true;
-                    } else {
-                        if (isRecording) {
-                            isRecording = false;
+                    }
+                    speechActive = true;
+                } else {
+                    if (speechActive) {
+                        // Speech -> silence transition: mark segment boundary
+                        segmentBoundaries.add(totalBytesRead);
+                        Log.d(TAG, "Segment boundary at byte offset: " + totalBytesRead);
+
+                        if (autoStopOnSilence) {
+                            // Auto-mode: stop recording on silence after speech
+                            speechActive = false;
                             mInProgress.set(false);
                         }
                     }
+                    speechActive = false;
                 }
-            } else {
-                if (!isRecording) sendUpdate(MSG_RECORDING);
-                isRecording = true;
+            }
+
+            // In non-auto mode, send MSG_RECORDING immediately
+            if (!autoStopOnSilence && !recordingStarted) {
+                sendUpdate(MSG_RECORDING);
+                recordingStarted = true;
             }
         }
         Log.d(TAG, "Total bytes recorded: " + totalBytesRead);
+        Log.d(TAG, "Segment boundaries: " + segmentBoundaries.size());
 
-        if (useVAD){
-            useVAD = false;
-            vad.close();
-            vad = null;
-            Log.d(TAG, "Closing VAD");
+        vad.close();
+        if (autoStopOnSilence) {
+            autoStopOnSilence = false;
         }
+
         audioRecord.stop();
         audioRecord.release();
         configureBluetooth(audioManager, useBluetoothMic, false);
 
-        // Save recorded audio data to BufferStore (up to 30 seconds)
+        // Save recorded audio data and segment boundaries to RecordBuffer
         RecordBuffer.setOutputBuffer(outputBuffer.toByteArray());
+        RecordBuffer.setSegmentBoundaries(segmentBoundaries);
+
         if (totalBytesRead > 6400){  //min 0.2s
             sendUpdate(MSG_RECORDING_DONE);
         } else {

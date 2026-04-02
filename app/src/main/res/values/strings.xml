@@ -41,5 +41,6 @@
     <string name="lang1">Language 1</string>
     <string name="lang2">Language 2</string>
     <string name="settings_use_bluetooth_mic">Use Bluetooth microphone:</string>
+    <string name="settings_max_recording_duration">Max recording duration (seconds)</string>
 
 </resources>
