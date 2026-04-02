@@ -42,5 +42,12 @@
     <string name="lang2">Language 2</string>
     <string name="settings_use_bluetooth_mic">Use Bluetooth microphone:</string>
     <string name="settings_max_recording_duration">Max recording duration (seconds)</string>
+    <string name="settings_word_replacements">Word Replacements</string>
+    <string name="replacement_add">Add</string>
+    <string name="replacement_from">From (misheard word)</string>
+    <string name="replacement_to">To (correct word)</string>
+    <string name="replacement_from_hint">e.g. Saira</string>
+    <string name="replacement_to_hint">e.g. Sayra</string>
+    <string name="replacement_add_title">Add Word Replacement</string>
 
 </resources>

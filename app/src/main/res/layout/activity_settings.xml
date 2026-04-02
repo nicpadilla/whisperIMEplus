@@ -224,6 +224,29 @@
                     android:contentDescription="@string/settings_use_bluetooth_mic"/>
 
             </LinearLayout>
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:layout_marginBottom="10dp"
+                android:textSize="20dp"
+                android:text="@string/settings_word_replacements" />
+
+            <ListView
+                android:id="@+id/list_word_replacements"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:divider="@null"
+                android:dividerHeight="0dp" />
+
+            <Button
+                android:id="@+id/btn_add_replacement"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/replacement_add"
+                android:layout_marginTop="4dp" />
+
         </LinearLayout>
     </ScrollView>
 </androidx.coordinatorlayout.widget.CoordinatorLayout>

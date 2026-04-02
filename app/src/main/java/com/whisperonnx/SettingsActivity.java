@@ -2,6 +2,7 @@ package com.whisperonnx;
 
 import android.Manifest;
 import android.annotation.SuppressLint;
+import android.app.AlertDialog;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.os.Build;
@@ -10,9 +11,14 @@ import android.util.Log;
 import android.util.Pair;
 import android.view.MenuItem;
 import android.view.View;
+import android.view.ViewGroup;
 import android.widget.AdapterView;
+import android.widget.Button;
 import android.widget.CheckBox;
+import android.widget.EditText;
 import android.widget.ImageButton;
+import android.widget.ListAdapter;
+import android.widget.ListView;
 import android.widget.Spinner;
 import android.widget.Toast;
 
@@ -24,8 +30,10 @@ import androidx.core.content.ContextCompat;
 import androidx.preference.PreferenceManager;
 
 import com.google.android.material.slider.RangeSlider;
+import com.whisperonnx.asr.WordReplacements;
 import com.whisperonnx.utils.LanguagePairAdapter;
 import com.whisperonnx.utils.ThemeUtils;
+import com.whisperonnx.utils.WordReplacementAdapter;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -43,6 +51,10 @@ public class SettingsActivity extends AppCompatActivity {
     private RangeSlider minSilence;
     private RangeSlider maxRecordingDuration;
     private CheckBox useBluetoothMic;
+    private ListView listWordReplacements;
+    private Button btnAddReplacement;
+    private List<WordReplacements.Entry> wordReplacementEntries;
+    private WordReplacementAdapter wordReplacementAdapter;
     private int langSelected;
 
     @SuppressLint("ClickableViewAccessibility")
@@ -222,8 +234,62 @@ public class SettingsActivity extends AppCompatActivity {
             editor.apply();
         });
 
+        // Word replacements
+        listWordReplacements = findViewById(R.id.list_word_replacements);
+        btnAddReplacement = findViewById(R.id.btn_add_replacement);
+        wordReplacementEntries = WordReplacements.load(sp);
+        wordReplacementAdapter = new WordReplacementAdapter(this, wordReplacementEntries, position -> {
+            wordReplacementEntries.remove(position);
+            WordReplacements.save(sp, wordReplacementEntries);
+            wordReplacementAdapter.notifyDataSetChanged();
+            setListViewHeightBasedOnChildren(listWordReplacements);
+        });
+        listWordReplacements.setAdapter(wordReplacementAdapter);
+        setListViewHeightBasedOnChildren(listWordReplacements);
+
+        btnAddReplacement.setOnClickListener(v -> {
+            View dialogView = getLayoutInflater().inflate(R.layout.dialog_add_replacement, null);
+            EditText etFrom = dialogView.findViewById(R.id.et_from);
+            EditText etTo = dialogView.findViewById(R.id.et_to);
+
+            new AlertDialog.Builder(this)
+                    .setTitle(R.string.replacement_add_title)
+                    .setView(dialogView)
+                    .setPositiveButton(android.R.string.ok, (dialog, which) -> {
+                        String from = etFrom.getText().toString().trim();
+                        String to = etTo.getText().toString().trim();
+                        if (!from.isEmpty() && !to.isEmpty()) {
+                            wordReplacementEntries.add(new WordReplacements.Entry(from, to));
+                            WordReplacements.save(sp, wordReplacementEntries);
+                            wordReplacementAdapter.notifyDataSetChanged();
+                            setListViewHeightBasedOnChildren(listWordReplacements);
+                        }
+                    })
+                    .setNegativeButton(android.R.string.cancel, null)
+                    .show();
+        });
+
         checkPermissions();
 
+    }
+
+    private static void setListViewHeightBasedOnChildren(ListView listView) {
+        ListAdapter adapter = listView.getAdapter();
+        if (adapter == null) return;
+
+        int totalHeight = 0;
+        for (int i = 0; i < adapter.getCount(); i++) {
+            View listItem = adapter.getView(i, null, listView);
+            listItem.measure(
+                    View.MeasureSpec.makeMeasureSpec(listView.getWidth(), View.MeasureSpec.UNSPECIFIED),
+                    View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
+            totalHeight += listItem.getMeasuredHeight();
+        }
+
+        ViewGroup.LayoutParams params = listView.getLayoutParams();
+        params.height = totalHeight + (listView.getDividerHeight() * (adapter.getCount() - 1));
+        listView.setLayoutParams(params);
+        listView.requestLayout();
     }
 
     private void checkPermissions() {

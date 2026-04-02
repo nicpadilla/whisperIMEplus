@@ -11,7 +11,10 @@ import com.whisperonnx.voice_translation.neural_networks.NeuralNetworkApi;
 import com.whisperonnx.voice_translation.neural_networks.voice.Recognizer;
 import com.whisperonnx.voice_translation.neural_networks.voice.RecognizerListener;
 
+import androidx.preference.PreferenceManager;
+
 import java.io.File;
+import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.Condition;
@@ -258,7 +261,11 @@ public class Whisper {
 
     private void sendResult(WhisperResult whisperResult) {
         if (mUpdateListener != null) {
-            mUpdateListener.onResultReceived(whisperResult);
+            List<WordReplacements.Entry> replacements = WordReplacements.load(
+                    PreferenceManager.getDefaultSharedPreferences(mContext));
+            String replaced = WordReplacements.applyReplacements(whisperResult.getResult(), replacements);
+            WhisperResult finalResult = new WhisperResult(replaced, whisperResult.getLanguage(), whisperResult.getTask());
+            mUpdateListener.onResultReceived(finalResult);
         }
     }
 
