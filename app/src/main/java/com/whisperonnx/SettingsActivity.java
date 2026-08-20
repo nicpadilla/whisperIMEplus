@@ -2,6 +2,7 @@ package com.whisperonnx;
 
 import android.Manifest;
 import android.annotation.SuppressLint;
+import android.app.AlertDialog;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.os.Build;
@@ -10,10 +11,15 @@ import android.util.Log;
 import android.util.Pair;
 import android.view.MenuItem;
 import android.view.View;
+import android.view.ViewGroup;
 import android.widget.AdapterView;
+import android.widget.Button;
 import android.widget.CheckBox;
+import android.widget.EditText;
 import android.widget.ImageButton;
+import android.widget.LinearLayout;
 import android.widget.Spinner;
+import android.widget.TextView;
 import android.widget.Toast;
 
 
@@ -24,9 +30,9 @@ import androidx.core.content.ContextCompat;
 import androidx.preference.PreferenceManager;
 
 import com.google.android.material.slider.RangeSlider;
+import com.whisperonnx.asr.WordReplacements;
 import com.whisperonnx.utils.LanguagePairAdapter;
 import com.whisperonnx.utils.ThemeUtils;
-
 import java.util.ArrayList;
 import java.util.List;
 
@@ -42,6 +48,9 @@ public class SettingsActivity extends AppCompatActivity {
     private CheckBox modeBluetooth;
     private String langCodeIME = "";
     private RangeSlider minSilence;
+    private RangeSlider maxRecordingDuration;
+    private Button btnAddReplacement;
+    private List<WordReplacements.Entry> wordReplacementEntries;
     private int langSelected;
 
     @SuppressLint("ClickableViewAccessibility")
@@ -213,8 +222,65 @@ public class SettingsActivity extends AppCompatActivity {
             }
         });
 
+        maxRecordingDuration = findViewById(R.id.settings_max_recording_duration);
+        float maxDuration = sp.getInt("maxRecordingSeconds", 120);
+        maxRecordingDuration.setValues(maxDuration);
+        maxRecordingDuration.addOnChangeListener(new RangeSlider.OnChangeListener() {
+            @Override
+            public void onValueChange(@NonNull RangeSlider slider, float value, boolean fromUser) {
+                SharedPreferences.Editor editor = sp.edit();
+                editor.putInt("maxRecordingSeconds", (int) value);
+                editor.apply();
+            }
+        });
+
+        // Word replacements
+        LinearLayout listWordReplacements = findViewById(R.id.list_word_replacements);
+        btnAddReplacement = findViewById(R.id.btn_add_replacement);
+        wordReplacementEntries = WordReplacements.load(sp);
+        refreshReplacementList(listWordReplacements);
+
+        btnAddReplacement.setOnClickListener(v -> {
+            View dialogView = getLayoutInflater().inflate(R.layout.dialog_add_replacement, null);
+            EditText etFrom = dialogView.findViewById(R.id.et_from);
+            EditText etTo = dialogView.findViewById(R.id.et_to);
+
+            new AlertDialog.Builder(this)
+                    .setTitle(R.string.replacement_add_title)
+                    .setView(dialogView)
+                    .setPositiveButton(android.R.string.ok, (dialog, which) -> {
+                        String from = etFrom.getText().toString().trim();
+                        String to = etTo.getText().toString().trim();
+                        if (!from.isEmpty() && !to.isEmpty()) {
+                            wordReplacementEntries.add(new WordReplacements.Entry(from, to));
+                            WordReplacements.save(sp, wordReplacementEntries);
+                            refreshReplacementList(listWordReplacements);
+                        }
+                    })
+                    .setNegativeButton(android.R.string.cancel, null)
+                    .show();
+        });
+
         checkPermissions();
 
+    }
+
+    private void refreshReplacementList(LinearLayout container) {
+        container.removeAllViews();
+        for (int i = 0; i < wordReplacementEntries.size(); i++) {
+            final int index = i;
+            WordReplacements.Entry entry = wordReplacementEntries.get(i);
+            View row = getLayoutInflater().inflate(R.layout.item_word_replacement, container, false);
+            TextView tvEntry = row.findViewById(R.id.tv_replacement_entry);
+            ImageButton btnDelete = row.findViewById(R.id.btn_delete_replacement);
+            tvEntry.setText(entry.from + "  \u2192  " + entry.to);
+            btnDelete.setOnClickListener(v -> {
+                wordReplacementEntries.remove(index);
+                WordReplacements.save(sp, wordReplacementEntries);
+                refreshReplacementList(container);
+            });
+            container.addView(row);
+        }
     }
 
     private void checkPermissions() {
