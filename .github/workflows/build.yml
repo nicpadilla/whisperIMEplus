@@ -2,7 +2,7 @@ name: Build and test
 
 on:
   push:
-    branches: [ master ]
+    branches: [ master, codex/fork-hardening ]
   pull_request:
     branches: [ master ]
 
@@ -14,7 +14,25 @@ permissions:
   contents: read
 
 jobs:
+  apply-bundle:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/codex/fork-hardening'
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out feature branch
+        uses: actions/checkout@v4
+        with:
+          ref: codex/fork-hardening
+          fetch-depth: 0
+
+      - name: Apply reviewed implementation bundle
+        run: bash tools/apply-fork-hardening-bundle.sh
+
   verify:
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
     timeout-minutes: 45
 
