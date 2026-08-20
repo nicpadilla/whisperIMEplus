@@ -16,7 +16,9 @@ public class RecorderTest {
     @Test public void stopIsNonBlockingAndProducesOneCompletion() throws Exception {
         Recorder.CaptureBackend backend = (request, control, observer) -> {
             observer.onSpeechStarted();
-            while (!control.shouldStop()) Thread.sleep(2L);
+            while (!control.shouldStop()) {
+                java.util.concurrent.locks.LockSupport.parkNanos(TimeUnit.MILLISECONDS.toNanos(2L));
+            }
             return recording();
         };
         Recorder recorder = new Recorder(backend, Executors.newSingleThreadExecutor());
@@ -41,7 +43,9 @@ public class RecorderTest {
 
     @Test public void cancelProducesCancellationAndSuppressesRecording() throws Exception {
         Recorder.CaptureBackend backend = (request, control, observer) -> {
-            while (!control.shouldStop()) Thread.sleep(2L);
+            while (!control.shouldStop()) {
+                java.util.concurrent.locks.LockSupport.parkNanos(TimeUnit.MILLISECONDS.toNanos(2L));
+            }
             return recording();
         };
         Recorder recorder = new Recorder(backend, Executors.newSingleThreadExecutor());
