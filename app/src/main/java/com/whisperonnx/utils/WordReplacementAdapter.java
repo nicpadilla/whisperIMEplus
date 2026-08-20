@@ -15,6 +15,8 @@ import androidx.recyclerview.widget.RecyclerView;
 import com.whisperonnx.R;
 import com.whisperonnx.asr.WordReplacements;
 
+import java.util.UUID;
+
 public final class WordReplacementAdapter extends
         ListAdapter<WordReplacements.Entry, WordReplacementAdapter.ViewHolder> {
     public interface Listener {
@@ -48,7 +50,23 @@ public final class WordReplacementAdapter extends
     }
 
     @Override public long getItemId(int position) {
-        return Integer.toUnsignedLong(getItem(position).id.hashCode());
+        return stableId(getItem(position).id);
+    }
+
+    private static long stableId(String id) {
+        long value;
+        try {
+            UUID uuid = UUID.fromString(id);
+            value = uuid.getMostSignificantBits() ^ uuid.getLeastSignificantBits();
+        } catch (IllegalArgumentException malformedId) {
+            // FNV-1a gives legacy/custom IDs a deterministic 64-bit identity.
+            value = 0xcbf29ce484222325L;
+            for (int index = 0; index < id.length(); index++) {
+                value ^= id.charAt(index);
+                value *= 0x100000001b3L;
+            }
+        }
+        return value == RecyclerView.NO_ID ? Long.MIN_VALUE : value;
     }
 
     @NonNull @Override public ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
