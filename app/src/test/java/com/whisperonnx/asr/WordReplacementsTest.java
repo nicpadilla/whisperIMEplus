@@ -50,9 +50,10 @@ public class WordReplacementsTest {
     @Test public void malformedLegacyStorageRecoversValidEntriesAndMigratesOnLoad() {
         preferences.edit().putString("wordReplacements",
                 "[{\"from\":\"Saira\",\"to\":\"Sayra\"},{\"from\":7},{\"bad\":true}]").commit();
+        // Applying first populates the compiled-rule cache with the legacy raw value.
+        assertEquals("Sayra", WordReplacements.apply(preferences, "Saira"));
         List<WordReplacements.Entry> loaded = WordReplacements.load(preferences);
         assertEquals(1, loaded.size());
-        assertEquals("Sayra", WordReplacements.apply(preferences, "Saira"));
         String migrated = preferences.getString("wordReplacements", "");
         assertTrue(migrated.contains("\"version\":2"));
         assertTrue(migrated.contains(loaded.get(0).id));
