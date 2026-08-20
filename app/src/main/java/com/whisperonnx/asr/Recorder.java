@@ -8,285 +8,407 @@ import android.media.AudioFormat;
 import android.media.AudioManager;
 import android.media.AudioRecord;
 import android.media.MediaRecorder;
+import android.os.SystemClock;
 import android.util.Log;
 
 import androidx.core.app.ActivityCompat;
 import androidx.preference.PreferenceManager;
 
-import com.konovalov.vad.webrtc.Vad;
 import com.konovalov.vad.webrtc.VadWebRTC;
 import com.konovalov.vad.webrtc.config.FrameSize;
 import com.konovalov.vad.webrtc.config.Mode;
 import com.konovalov.vad.webrtc.config.SampleRate;
-import com.whisperonnx.R;
 
 import java.io.ByteArrayOutputStream;
 import java.util.ArrayList;
 import java.util.List;
-
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.locks.Condition;
-import java.util.concurrent.locks.Lock;
-import java.util.concurrent.locks.ReentrantLock;
+import java.util.concurrent.atomic.AtomicLong;
 
-public class Recorder {
-
+/**
+ * Owns one capture request at a time. Stop/cancel are non-blocking and every accepted request
+ * produces exactly one typed terminal event.
+ */
+public final class Recorder implements AutoCloseable {
     public interface RecorderListener {
-        void onUpdateReceived(String message);
+        void onRecorderEvent(RecorderEvent event);
+    }
+
+    interface CaptureBackend extends AutoCloseable {
+        RecordingData capture(CaptureRequest request, CaptureControl control,
+                              CaptureObserver observer) throws CaptureFailure;
+        @Override default void close() { }
+    }
+
+    interface CaptureObserver {
+        void onSpeechStarted();
+    }
+
+    static final class CaptureRequest {
+        final long requestId;
+        final boolean autoStopOnSilence;
+
+        CaptureRequest(long requestId, boolean autoStopOnSilence) {
+            this.requestId = requestId;
+            this.autoStopOnSilence = autoStopOnSilence;
+        }
+    }
+
+    static final class CaptureControl {
+        private final AtomicBoolean stopRequested = new AtomicBoolean(false);
+        private final AtomicBoolean cancelled = new AtomicBoolean(false);
+
+        void requestStop() { stopRequested.set(true); }
+        void cancel() { cancelled.set(true); stopRequested.set(true); }
+        boolean shouldStop() { return stopRequested.get(); }
+        boolean isCancelled() { return cancelled.get(); }
+    }
+
+    static final class CaptureFailure extends Exception {
+        final RecorderEvent.ErrorCode code;
+
+        CaptureFailure(RecorderEvent.ErrorCode code, String message) {
+            super(message);
+            this.code = code;
+        }
+
+        CaptureFailure(RecorderEvent.ErrorCode code, String message, Throwable cause) {
+            super(message, cause);
+            this.code = code;
+        }
     }
 
     private static final String TAG = "Recorder";
-    public static final String ACTION_STOP = "Stop";
-    public static final String ACTION_RECORD = "Record";
-    public static final String MSG_RECORDING = "Recording...";
-    public static final String MSG_RECORDING_DONE = "Recording done...!";
-    public static final String MSG_RECORDING_ERROR = "Recording error...";
+    static final int SAMPLE_RATE_HZ = 16000;
+    static final int CHANNEL_COUNT = 1;
+    static final int BYTES_PER_SAMPLE = 2;
+    static final int VAD_FRAME_SAMPLES = 480;
+    static final int VAD_FRAME_BYTES = VAD_FRAME_SAMPLES * BYTES_PER_SAMPLE * CHANNEL_COUNT;
+    static final int MIN_VALID_AUDIO_BYTES = 6400;
 
-    private final Context mContext;
-    private final AtomicBoolean mInProgress = new AtomicBoolean(false);
-
-    private RecorderListener mListener;
-    private final Lock lock = new ReentrantLock();
-    private final Condition hasTask = lock.newCondition();
-    private final Object fileSavedLock = new Object(); // Lock object for wait/notify
-
-    private volatile boolean shouldStartRecording = false;
-    private boolean autoStopOnSilence = false;
-    private static final int VAD_FRAME_SIZE = 480;
-    private SharedPreferences sp;
-
-    private final Thread workerThread;
+    private final Object stateLock = new Object();
+    private final AtomicLong nextRequestId = new AtomicLong(1L);
+    private final CaptureBackend captureBackend;
+    private final ExecutorService executor;
+    private volatile RecorderListener listener;
+    private volatile boolean closed;
+    private ActiveRequest activeRequest;
 
     public Recorder(Context context) {
-        this.mContext = context;
-        sp = PreferenceManager.getDefaultSharedPreferences(mContext);
-        // Initialize and start the worker thread
-        workerThread = new Thread(this::recordLoop);
-        workerThread.start();
+        this(new AndroidCaptureBackend(context.getApplicationContext()),
+                Executors.newSingleThreadExecutor(new RecorderThreadFactory()));
+    }
+
+    Recorder(CaptureBackend captureBackend, ExecutorService executor) {
+        if (captureBackend == null || executor == null) {
+            throw new IllegalArgumentException("captureBackend and executor are required");
+        }
+        this.captureBackend = captureBackend;
+        this.executor = executor;
     }
 
     public void setListener(RecorderListener listener) {
-        this.mListener = listener;
+        this.listener = listener;
     }
 
+    public long start() {
+        return start(false);
+    }
 
-    public void start() {
-        if (!mInProgress.compareAndSet(false, true)) {
-            Log.d(TAG, "Recording is already in progress...");
-            return;
+    public long start(boolean autoStopOnSilence) {
+        final ActiveRequest request;
+        synchronized (stateLock) {
+            if (closed || activeRequest != null) return -1L;
+            request = new ActiveRequest(nextRequestId.getAndIncrement(), autoStopOnSilence);
+            activeRequest = request;
         }
-        lock.lock();
-        try {
-            Log.d(TAG, "Recording starts now");
-            shouldStartRecording = true;
-            hasTask.signal();
-        } finally {
-            lock.unlock();
+        executor.execute(() -> runCapture(request));
+        return request.requestId;
+    }
+
+    /** Requests normal completion; captured audio remains eligible for transcription. */
+    public boolean requestStop(long requestId) {
+        synchronized (stateLock) {
+            if (activeRequest == null || activeRequest.requestId != requestId) return false;
+            activeRequest.control.requestStop();
+            return true;
         }
     }
 
-    public void initVad(){
-        autoStopOnSilence = true;
-        Log.d(TAG, "Auto-stop on silence enabled");
-    }
-
-
-    public void stop() {
-        Log.d(TAG, "Recording stopped");
-        mInProgress.set(false);
-
-        // Wait for the recording thread to finish
-        synchronized (fileSavedLock) {
-            try {
-                fileSavedLock.wait(); // Wait until notified by the recording thread
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt(); // Restore interrupted status
-            }
+    /** Cancels and discards the active capture. */
+    public boolean cancel(long requestId) {
+        synchronized (stateLock) {
+            if (activeRequest == null || activeRequest.requestId != requestId) return false;
+            activeRequest.control.cancel();
+            return true;
         }
     }
 
     public boolean isInProgress() {
-        return mInProgress.get();
-    }
-
-    private void sendUpdate(String message) {
-        if (mListener != null)
-            mListener.onUpdateReceived(message);
-    }
-
-
-    private void recordLoop() {
-        while (true) {
-            lock.lock();
-            try {
-                while (!shouldStartRecording) {
-                    hasTask.await();
-                }
-                shouldStartRecording = false;
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                return;
-            } finally {
-                lock.unlock();
-            }
-
-            // Start recording process
-            try {
-                recordAudio();
-            } catch (Exception e) {
-                Log.e(TAG, "Recording error...", e);
-                sendUpdate(e.getMessage());
-            } finally {
-                mInProgress.set(false);
-            }
+        synchronized (stateLock) {
+            return activeRequest != null;
         }
     }
 
-    private void recordAudio() {
-        if (ActivityCompat.checkSelfPermission(mContext, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
-            Log.d(TAG, "AudioRecord permission is not granted");
-            sendUpdate(mContext.getString(R.string.need_record_audio_permission));
-            return;
+    public long getActiveRequestId() {
+        synchronized (stateLock) {
+            return activeRequest == null ? -1L : activeRequest.requestId;
         }
+    }
 
-        int channels = 1;
-        int bytesPerSample = 2;
-        int sampleRateInHz = 16000;
-        int channelConfig = AudioFormat.CHANNEL_IN_MONO;
-        int audioFormat = AudioFormat.ENCODING_PCM_16BIT;
-        int audioSource = MediaRecorder.AudioSource.VOICE_RECOGNITION;
-
-        int bufferSize = AudioRecord.getMinBufferSize(sampleRateInHz, channelConfig, audioFormat);
-        if (bufferSize < VAD_FRAME_SIZE * 2) bufferSize = VAD_FRAME_SIZE * 2;
-
-        boolean useBluetooth = sp.getBoolean("bluetooth", false);
-        AudioManager audioManager = (AudioManager) mContext.getSystemService(Context.AUDIO_SERVICE);
-        configureBluetooth(audioManager, useBluetooth, true);
-
-        AudioRecord.Builder builder = new AudioRecord.Builder()
-                .setAudioSource(audioSource)
-                .setAudioFormat(new AudioFormat.Builder()
-                        .setChannelMask(channelConfig)
-                        .setEncoding(audioFormat)
-                        .setSampleRate(sampleRateInHz)
-                        .build())
-                .setBufferSizeInBytes(bufferSize);
-
-        AudioRecord audioRecord = builder.build();
-        audioRecord.startRecording();
-
-        // Configurable max recording duration (default 120 seconds)
-        int maxRecordingSeconds = sp.getInt("maxRecordingSeconds", 120);
-        int maxBytes = sampleRateInHz * bytesPerSample * channels * maxRecordingSeconds;
-
-        ByteArrayOutputStream outputBuffer = new ByteArrayOutputStream(); // Buffer for saving data RecordBuffer
-
-        byte[] audioData = new byte[bufferSize];
-        int totalBytesRead = 0;
-
-        // Always create VAD for segment boundary tracking
-        int silenceDurationMs = sp.getInt("silenceDurationMs", 800);
-        VadWebRTC vad = Vad.builder()
-                .setSampleRate(SampleRate.SAMPLE_RATE_16K)
-                .setFrameSize(FrameSize.FRAME_SIZE_480)
-                .setMode(Mode.VERY_AGGRESSIVE)
-                .setSilenceDurationMs(silenceDurationMs)
-                .setSpeechDurationMs(200)
-                .build();
-
-        List<Integer> segmentBoundaries = new ArrayList<>();
-        boolean speechActive = false;
-        boolean recordingStarted = false;
-        byte[] vadAudioBuffer = new byte[VAD_FRAME_SIZE * 2];  //VAD needs 16 bit
-
-        while (mInProgress.get() && totalBytesRead < maxBytes) {
-            int bytesRead = audioRecord.read(audioData, 0, VAD_FRAME_SIZE * 2);
-            if (bytesRead > 0) {
-                outputBuffer.write(audioData, 0, bytesRead);
-                totalBytesRead += bytesRead;
+    private void runCapture(ActiveRequest request) {
+        emit(RecorderEvent.captureStarted(request.requestId));
+        try {
+            RecordingData recording = captureBackend.capture(
+                    new CaptureRequest(request.requestId, request.autoStopOnSilence),
+                    request.control,
+                    () -> emitNonTerminal(request, RecorderEvent.speechStarted(request.requestId)));
+            if (request.control.isCancelled()) {
+                finish(request, RecorderEvent.cancelled(request.requestId));
+            } else if (recording == null || recording.getValidByteCount() < MIN_VALID_AUDIO_BYTES) {
+                finish(request, RecorderEvent.error(request.requestId,
+                        RecorderEvent.ErrorCode.NO_AUDIO, "No usable voice input was captured", null));
             } else {
-                Log.d(TAG, "AudioRecord error, bytes read: " + bytesRead);
-                break;
+                finish(request, RecorderEvent.completed(request.requestId, recording));
+            }
+        } catch (CaptureFailure failure) {
+            RecorderEvent terminal = request.control.isCancelled()
+                    ? RecorderEvent.cancelled(request.requestId)
+                    : RecorderEvent.error(request.requestId, failure.code,
+                    failure.getMessage(), failure.getCause());
+            finish(request, terminal);
+        } catch (Throwable failure) {
+            Log.e(TAG, "Unhandled recording failure", failure);
+            RecorderEvent terminal = request.control.isCancelled()
+                    ? RecorderEvent.cancelled(request.requestId)
+                    : RecorderEvent.error(request.requestId,
+                    RecorderEvent.ErrorCode.INTERNAL_ERROR,
+                    failure.getMessage(), failure);
+            finish(request, terminal);
+        }
+    }
+
+    private void emitNonTerminal(ActiveRequest request, RecorderEvent event) {
+        synchronized (stateLock) {
+            if (closed || activeRequest != request || request.terminalDelivered.get()) return;
+        }
+        emit(event);
+    }
+
+    private void finish(ActiveRequest request, RecorderEvent terminal) {
+        if (!request.terminalDelivered.compareAndSet(false, true)) return;
+        synchronized (stateLock) {
+            if (activeRequest == request) activeRequest = null;
+        }
+        emit(terminal);
+    }
+
+    private void emit(RecorderEvent event) {
+        RecorderListener current = listener;
+        if (current != null && !closed) current.onRecorderEvent(event);
+    }
+
+    @Override
+    public void close() {
+        ActiveRequest request;
+        synchronized (stateLock) {
+            if (closed) return;
+            closed = true;
+            request = activeRequest;
+            if (request != null) request.control.cancel();
+            activeRequest = null;
+        }
+        listener = null;
+        executor.shutdownNow();
+        try {
+            captureBackend.close();
+        } catch (Exception e) {
+            Log.w(TAG, "Recorder backend cleanup failed", e);
+        }
+    }
+
+    private static final class ActiveRequest {
+        final long requestId;
+        final boolean autoStopOnSilence;
+        final CaptureControl control = new CaptureControl();
+        final AtomicBoolean terminalDelivered = new AtomicBoolean(false);
+
+        ActiveRequest(long requestId, boolean autoStopOnSilence) {
+            this.requestId = requestId;
+            this.autoStopOnSilence = autoStopOnSilence;
+        }
+    }
+
+    private static final class RecorderThreadFactory implements ThreadFactory {
+        @Override public Thread newThread(Runnable runnable) {
+            Thread thread = new Thread(runnable, "whisper-recorder");
+            thread.setDaemon(true);
+            return thread;
+        }
+    }
+
+    private static final class AndroidCaptureBackend implements CaptureBackend {
+        private final Context context;
+        private final SharedPreferences preferences;
+
+        AndroidCaptureBackend(Context context) {
+            this.context = context;
+            this.preferences = PreferenceManager.getDefaultSharedPreferences(context);
+        }
+
+        @Override
+        public RecordingData capture(CaptureRequest request, CaptureControl control,
+                                     CaptureObserver observer) throws CaptureFailure {
+            if (ActivityCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO)
+                    != PackageManager.PERMISSION_GRANTED) {
+                throw new CaptureFailure(RecorderEvent.ErrorCode.PERMISSION_DENIED,
+                        "RECORD_AUDIO permission is not granted");
             }
 
-            // VAD processing for segment boundary tracking
-            byte[] outputBufferByteArray = outputBuffer.toByteArray();
-            if (outputBufferByteArray.length >= VAD_FRAME_SIZE * 2) {
-                // Always use the last VAD_FRAME_SIZE * 2 bytes (16 bit) from outputBuffer for VAD
-                System.arraycopy(outputBufferByteArray, outputBufferByteArray.length - VAD_FRAME_SIZE * 2, vadAudioBuffer, 0, VAD_FRAME_SIZE * 2);
+            final int channelConfig = AudioFormat.CHANNEL_IN_MONO;
+            final int audioEncoding = AudioFormat.ENCODING_PCM_16BIT;
+            int platformBufferSize = AudioRecord.getMinBufferSize(
+                    SAMPLE_RATE_HZ, channelConfig, audioEncoding);
+            if (platformBufferSize <= 0) platformBufferSize = VAD_FRAME_BYTES * 4;
+            platformBufferSize = Math.max(platformBufferSize, VAD_FRAME_BYTES);
 
-                boolean isSpeech = vad.isSpeech(vadAudioBuffer);
+            boolean bluetoothRequested = preferences.getBoolean("bluetooth", false);
+            AudioManager audioManager = (AudioManager) context.getSystemService(Context.AUDIO_SERVICE);
+            AudioRecord audioRecord = null;
+            VadWebRTC vad = null;
+            boolean scoStarted = false;
+            long captureStartMs = SystemClock.elapsedRealtime();
+            try {
+                if (bluetoothRequested && audioManager != null) {
+                    // Full version-aware route confirmation is tracked separately in issue #9.
+                    audioManager.startBluetoothSco();
+                    audioManager.setBluetoothScoOn(true);
+                    scoStarted = true;
+                }
 
-                if (isSpeech) {
-                    if (!speechActive) {
-                        Log.d(TAG, "VAD Speech detected");
-                        if (autoStopOnSilence) {
-                            sendUpdate(MSG_RECORDING);
-                        }
+                try {
+                    audioRecord = new AudioRecord.Builder()
+                            .setAudioSource(MediaRecorder.AudioSource.VOICE_RECOGNITION)
+                            .setAudioFormat(new AudioFormat.Builder()
+                                    .setChannelMask(channelConfig)
+                                    .setEncoding(audioEncoding)
+                                    .setSampleRate(SAMPLE_RATE_HZ)
+                                    .build())
+                            .setBufferSizeInBytes(platformBufferSize)
+                            .build();
+                    if (audioRecord.getState() != AudioRecord.STATE_INITIALIZED) {
+                        throw new IllegalStateException("AudioRecord did not initialize");
                     }
-                    speechActive = true;
-                } else {
-                    if (speechActive) {
-                        // Speech -> silence transition: mark segment boundary
-                        segmentBoundaries.add(totalBytesRead);
-                        Log.d(TAG, "Segment boundary at byte offset: " + totalBytesRead);
-
-                        if (autoStopOnSilence) {
-                            // Auto-mode: stop recording on silence after speech
-                            speechActive = false;
-                            mInProgress.set(false);
-                        }
+                    audioRecord.startRecording();
+                    if (audioRecord.getRecordingState() != AudioRecord.RECORDSTATE_RECORDING) {
+                        throw new IllegalStateException("AudioRecord did not start");
                     }
-                    speechActive = false;
+                } catch (RuntimeException e) {
+                    throw new CaptureFailure(RecorderEvent.ErrorCode.INITIALIZATION_FAILED,
+                            "Unable to initialize microphone capture", e);
+                }
+
+                int silenceDurationMs = preferences.getInt("silenceDurationMs", 800);
+                final VadWebRTC activeVad = com.konovalov.vad.webrtc.Vad.builder()
+                        .setSampleRate(SampleRate.SAMPLE_RATE_16K)
+                        .setFrameSize(FrameSize.FRAME_SIZE_480)
+                        .setMode(Mode.VERY_AGGRESSIVE)
+                        .setSilenceDurationMs(silenceDurationMs)
+                        .setSpeechDurationMs(200)
+                        .build();
+                vad = activeVad;
+
+                int maxSeconds = Math.max(1, preferences.getInt("maxRecordingSeconds", 120));
+                int maxBytes = Math.multiplyExact(
+                        Math.multiplyExact(SAMPLE_RATE_HZ * BYTES_PER_SAMPLE * CHANNEL_COUNT,
+                                maxSeconds), 1);
+                OwnedByteArrayOutputStream output = new OwnedByteArrayOutputStream(
+                        Math.min(maxBytes, SAMPLE_RATE_HZ * BYTES_PER_SAMPLE * 10));
+                byte[] readBuffer = new byte[Math.max(VAD_FRAME_BYTES, platformBufferSize)];
+                VadFrameAssembler assembler = new VadFrameAssembler(VAD_FRAME_BYTES);
+                List<Integer> boundaries = new ArrayList<>();
+                final boolean[] speechActive = {false};
+                final boolean[] speechEventSent = {false};
+                final boolean[] autoSilenceReached = {false};
+                int zeroReads = 0;
+
+                while (!control.shouldStop() && output.size() < maxBytes) {
+                    int bytesRequested = Math.min(readBuffer.length, maxBytes - output.size());
+                    int bytesRead = audioRecord.read(readBuffer, 0, bytesRequested);
+                    if (bytesRead > 0) {
+                        zeroReads = 0;
+                        output.write(readBuffer, 0, bytesRead);
+                        assembler.accept(readBuffer, 0, bytesRead, (frame, endByteOffset) -> {
+                            boolean speech = activeVad.isSpeech(frame);
+                            if (speech) {
+                                if (!speechEventSent[0]) {
+                                    speechEventSent[0] = true;
+                                    observer.onSpeechStarted();
+                                }
+                                speechActive[0] = true;
+                            } else if (speechActive[0]) {
+                                int boundary = (int) Math.min(Integer.MAX_VALUE, endByteOffset);
+                                boundaries.add(boundary);
+                                speechActive[0] = false;
+                                if (request.autoStopOnSilence) autoSilenceReached[0] = true;
+                            }
+                        });
+                        if (autoSilenceReached[0]) break;
+                    } else if (bytesRead == 0) {
+                        if (++zeroReads >= 20) {
+                            throw new CaptureFailure(RecorderEvent.ErrorCode.READ_FAILED,
+                                    "Microphone returned no data repeatedly");
+                        }
+                    } else {
+                        throw new CaptureFailure(RecorderEvent.ErrorCode.READ_FAILED,
+                                "AudioRecord.read failed with code " + bytesRead);
+                    }
+                }
+
+                if (control.isCancelled()) return null;
+                long durationMs = SystemClock.elapsedRealtime() - captureStartMs;
+                String requestedRoute = bluetoothRequested ? "bluetooth" : "default";
+                String actualRoute = bluetoothRequested && scoStarted
+                        ? "bluetooth-requested-unconfirmed" : "default";
+                return RecordingData.takeOwnership(output.ownedBuffer(), output.size(),
+                        SAMPLE_RATE_HZ, CHANNEL_COUNT, BYTES_PER_SAMPLE, audioEncoding,
+                        boundaries, durationMs, requestedRoute, actualRoute);
+            } finally {
+                if (vad != null) {
+                    try { vad.close(); } catch (RuntimeException e) {
+                        Log.w(TAG, "VAD cleanup failed", e);
+                    }
+                }
+                if (audioRecord != null) {
+                    try {
+                        if (audioRecord.getRecordingState() == AudioRecord.RECORDSTATE_RECORDING) {
+                            audioRecord.stop();
+                        }
+                    } catch (RuntimeException e) {
+                        Log.w(TAG, "AudioRecord stop failed", e);
+                    }
+                    try { audioRecord.release(); } catch (RuntimeException e) {
+                        Log.w(TAG, "AudioRecord release failed", e);
+                    }
+                }
+                if (scoStarted && audioManager != null) {
+                    try {
+                        audioManager.stopBluetoothSco();
+                        audioManager.setBluetoothScoOn(false);
+                    } catch (RuntimeException e) {
+                        Log.w(TAG, "Bluetooth route cleanup failed", e);
+                    }
                 }
             }
-
-            // In non-auto mode, send MSG_RECORDING immediately
-            if (!autoStopOnSilence && !recordingStarted) {
-                sendUpdate(MSG_RECORDING);
-                recordingStarted = true;
-            }
-        }
-        Log.d(TAG, "Total bytes recorded: " + totalBytesRead);
-        Log.d(TAG, "Segment boundaries: " + segmentBoundaries.size());
-
-        vad.close();
-        if (autoStopOnSilence) {
-            autoStopOnSilence = false;
-        }
-
-        audioRecord.stop();
-        audioRecord.release();
-        configureBluetooth(audioManager, useBluetooth, false);
-
-        // Save recorded audio data and segment boundaries to RecordBuffer
-        RecordBuffer.setOutputBuffer(outputBuffer.toByteArray());
-        RecordBuffer.setSegmentBoundaries(segmentBoundaries);
-
-        if (totalBytesRead > 6400){  //min 0.2s
-            sendUpdate(MSG_RECORDING_DONE);
-        } else {
-            sendUpdate(MSG_RECORDING_ERROR);
-        }
-
-        // Notify the waiting thread that recording is complete
-        synchronized (fileSavedLock) {
-            fileSavedLock.notify(); // Notify that recording is finished
-        }
-
-    }
-
-    // Package-private for testing
-    void configureBluetooth(AudioManager audioManager, boolean useBluetooth, boolean start) {
-        if (useBluetooth) {
-            if (start) {
-                audioManager.startBluetoothSco();
-                audioManager.setBluetoothScoOn(true);
-            } else {
-                audioManager.stopBluetoothSco();
-                audioManager.setBluetoothScoOn(false);
-            }
         }
     }
 
+    /** Exposes the owned backing array only at the one-time RecordingData handoff. */
+    private static final class OwnedByteArrayOutputStream extends ByteArrayOutputStream {
+        OwnedByteArrayOutputStream(int size) { super(Math.max(32, size)); }
+        byte[] ownedBuffer() { return buf; }
+    }
 }

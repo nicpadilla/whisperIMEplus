@@ -3,43 +3,47 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:fitsSystemWindows="true">
+
     <ScrollView
         android:layout_width="match_parent"
         android:layout_height="match_parent">
+
         <LinearLayout
             android:layout_width="match_parent"
-            android:layout_height="match_parent"
+            android:layout_height="wrap_content"
             android:orientation="vertical"
             android:padding="16dp">
+
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginVertical="10dp"
-                android:textSize="20dp"
                 android:text="@string/settings_ime"
-                />
+                android:textSize="20sp" />
+
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="10dp"
                 android:orientation="horizontal">
+
                 <ImageButton
                     android:id="@+id/btnLang1"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:background="@null"
                     android:layout_gravity="center_vertical"
-                    android:src="@drawable/ic_counter_1_off_36dp"
-                    android:contentDescription="@string/lang1"/>
+                    android:background="@null"
+                    android:contentDescription="@string/lang1"
+                    android:src="@drawable/ic_counter_1_off_36dp" />
 
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_gravity="center_vertical"
                     android:layout_marginStart="5dp"
-                    android:textSize="16sp"
+                    android:text="@string/language"
                     android:textColor="@color/colorAccent"
-                    android:text="@string/language" />
+                    android:textSize="16sp" />
 
                 <Spinner
                     android:id="@+id/spnrLanguage1_ime"
@@ -48,28 +52,30 @@
                     android:layout_gravity="center_vertical"
                     android:layout_weight="1" />
             </LinearLayout>
+
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="10dp"
                 android:orientation="horizontal">
+
                 <ImageButton
                     android:id="@+id/btnLang2"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:background="@null"
                     android:layout_gravity="center_vertical"
-                    android:src="@drawable/ic_counter_2_off_36dp"
-                    android:contentDescription="@string/lang1"/>
+                    android:background="@null"
+                    android:contentDescription="@string/lang2"
+                    android:src="@drawable/ic_counter_2_off_36dp" />
 
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_gravity="center_vertical"
                     android:layout_marginStart="5dp"
-                    android:textSize="16sp"
+                    android:text="@string/language"
                     android:textColor="@color/colorAccent"
-                    android:text="@string/language" />
+                    android:textSize="16sp" />
 
                 <Spinner
                     android:id="@+id/spnrLanguage2_ime"
@@ -78,39 +84,36 @@
                     android:layout_gravity="center_vertical"
                     android:layout_weight="1" />
             </LinearLayout>
+
             <LinearLayout
                 android:id="@+id/layout_mode_chinese_ime"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:visibility="visible"
                 android:gravity="start">
 
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:gravity="center_vertical"
-                    android:textSize="16sp"
+                    android:text="@string/simple_chinese"
                     android:textColor="@color/colorAccent"
-                    android:text="@string/simple_chinese" />
+                    android:textSize="16sp" />
 
                 <CheckBox
                     android:id="@+id/mode_simple_chinese_ime"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:minWidth="0dp"
+                    android:contentDescription="@string/simple_chinese"
                     android:minHeight="0dp"
-                    android:contentDescription="@string/simple_chinese"/>
-
+                    android:minWidth="0dp" />
             </LinearLayout>
-
 
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginVertical="10dp"
-                android:textSize="20dp"
                 android:text="@string/settings_voice_input"
-            />
+                android:textSize="20sp" />
 
             <LinearLayout
                 android:id="@+id/layout_language"
@@ -122,9 +125,9 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:textSize="16sp"
+                    android:text="@string/language"
                     android:textColor="@color/colorAccent"
-                    android:text="@string/language" />
+                    android:textSize="16sp" />
 
                 <Spinner
                     android:id="@+id/spnrLanguage"
@@ -132,6 +135,7 @@
                     android:layout_height="wrap_content"
                     android:layout_weight="1" />
             </LinearLayout>
+
             <LinearLayout
                 android:id="@+id/layout_mode_chinese"
                 android:layout_width="match_parent"
@@ -142,63 +146,58 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:gravity="center_vertical"
-                    android:textSize="16sp"
+                    android:text="@string/simple_chinese"
                     android:textColor="@color/colorAccent"
-                    android:text="@string/simple_chinese" />
+                    android:textSize="16sp" />
 
                 <CheckBox
                     android:id="@+id/mode_simple_chinese"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:minWidth="0dp"
+                    android:contentDescription="@string/simple_chinese"
                     android:minHeight="0dp"
-                    android:contentDescription="@string/simple_chinese"/>
-
+                    android:minWidth="0dp" />
             </LinearLayout>
+
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginVertical="10dp"
-                android:textSize="20dp"
                 android:text="@string/settings_general"
-                />
+                android:textSize="20sp" />
 
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:gravity="center_vertical"
-                android:textSize="16sp"
+                android:text="@string/settings_minimum_silence"
                 android:textColor="@color/colorAccent"
-                android:text="@string/settings_minimum_silence" />
+                android:textSize="16sp" />
 
             <com.google.android.material.slider.RangeSlider
                 android:id="@+id/settings_min_silence"
-                android:layout_width="wrap_content"
-                android:layout_height="8sp"
-                android:gravity="center_vertical"
-                android:valueFrom = "0"
-                android:valueTo = "3000"
-                android:stepSize = "100"
-                />
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:stepSize="100"
+                android:valueFrom="0"
+                android:valueTo="3000" />
 
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="10dp"
                 android:gravity="center_vertical"
-                android:textSize="16sp"
+                android:text="@string/settings_max_recording_duration"
                 android:textColor="@color/colorAccent"
-                android:text="@string/settings_max_recording_duration" />
+                android:textSize="16sp" />
 
             <com.google.android.material.slider.RangeSlider
                 android:id="@+id/settings_max_recording_duration"
-                android:layout_width="wrap_content"
-                android:layout_height="8sp"
-                android:gravity="center_vertical"
-                android:valueFrom = "30"
-                android:valueTo = "300"
-                android:stepSize = "30"
-                />
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:stepSize="30"
+                android:valueFrom="30"
+                android:valueTo="300" />
 
             <LinearLayout
                 android:id="@+id/layout_mode_bluetooth"
@@ -211,41 +210,32 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:gravity="center_vertical"
-                    android:textSize="16sp"
+                    android:text="@string/setting_bluetooth"
                     android:textColor="@color/colorAccent"
-                    android:text="@string/setting_bluetooth" />
+                    android:textSize="16sp" />
 
                 <CheckBox
                     android:id="@+id/mode_bluetooth"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:minWidth="0dp"
+                    android:contentDescription="@string/setting_bluetooth"
                     android:minHeight="0dp"
-                    android:contentDescription="@string/setting_bluetooth"/>
-
+                    android:minWidth="0dp" />
             </LinearLayout>
 
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="16dp"
-                android:layout_marginBottom="10dp"
-                android:textSize="20dp"
-                android:text="@string/settings_word_replacements" />
-
-            <LinearLayout
-                android:id="@+id/list_word_replacements"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical" />
+                android:layout_marginBottom="8dp"
+                android:text="@string/settings_word_replacements"
+                android:textSize="20sp" />
 
             <Button
-                android:id="@+id/btn_add_replacement"
+                android:id="@+id/btn_manage_replacements"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="@string/replacement_add"
-                android:layout_marginTop="4dp" />
-
+                android:text="@string/replacement_manage" />
         </LinearLayout>
     </ScrollView>
 </androidx.coordinatorlayout.widget.CoordinatorLayout>
