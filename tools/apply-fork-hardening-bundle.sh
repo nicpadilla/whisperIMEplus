@@ -18,80 +18,14 @@ cat \
   | base64 --decode > "$archive"
 tar -xzf "$archive"
 
-cat > .github/workflows/build.yml <<'CLEAN_WORKFLOW'
-name: Build and test
-
-on:
-  push:
-    branches: [ master ]
-  pull_request:
-    branches: [ master ]
-
-concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
-
-permissions:
-  contents: read
-
-jobs:
-  verify:
-    runs-on: ubuntu-latest
-    timeout-minutes: 45
-
-    steps:
-      - name: Check out source
-        uses: actions/checkout@v4
-
-      - name: Set up JDK 17
-        uses: actions/setup-java@v4
-        with:
-          java-version: '17'
-          distribution: 'temurin'
-
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
-
-      - name: Build debug APK
-        run: ./gradlew --stacktrace assembleDebug
-
-      - name: Run unit tests
-        run: ./gradlew --stacktrace testDebugUnitTest
-
-      - name: Run Android lint
-        run: ./gradlew --stacktrace lintDebug
-
-      - name: Upload test and lint reports
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: verification-reports-${{ github.sha }}
-          path: |
-            app/build/reports/tests/**
-            app/build/test-results/**
-            app/build/reports/lint-results-debug.*
-          if-no-files-found: ignore
-          retention-days: 14
-
-      - name: Upload debug APK
-        uses: actions/upload-artifact@v4
-        if: success()
-        with:
-          name: debug-apk-${{ github.sha }}
-          path: app/build/outputs/apk/debug/app-debug.apk
-          if-no-files-found: error
-          retention-days: 14
-CLEAN_WORKFLOW
 
 git rm -f --ignore-unmatch -- \
   app/src/main/java/com/whisperonnx/asr/RecordBuffer.java \
   app/src/test/java/com/whisperonnx/asr/RecorderBluetoothTest.java \
   tools/fork-hardening.bundle.* \
-  tools/apply-fork-hardening-bundle.sh \
-  .github/workflows/apply-fork-hardening-bundle.yml
+  tools/apply-fork-hardening-bundle.sh
 
 git add -- \
-  .github/workflows/build.yml \
   app/build.gradle \
   app/src/main/AndroidManifest.xml \
   app/src/main/java/com/whisperonnx/MainActivity.java \
