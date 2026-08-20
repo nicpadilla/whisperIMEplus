@@ -82,10 +82,8 @@ public final class WordReplacements {
     public static List<Entry> load(SharedPreferences preferences) {
         if (preferences == null) return Collections.emptyList();
         String raw = preferences.getString(PREF_KEY, "[]");
-        synchronized (CACHE) {
-            CacheEntry cached = CACHE.get(preferences);
-            if (cached != null && cached.raw.equals(raw)) return cached.entries;
-        }
+        // Always inspect storage on explicit load so legacy data is migrated even if apply()
+        // previously populated the compiled-rule cache for the old raw value.
         ParsedRules parsed = parse(raw);
         if (parsed.needsMigration) {
             // Persist stable IDs, enabled state, ordering, and the storage version immediately.
