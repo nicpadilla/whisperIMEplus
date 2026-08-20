@@ -87,6 +87,12 @@ public final class WordReplacements {
             if (cached != null && cached.raw.equals(raw)) return cached.entries;
         }
         ParsedRules parsed = parse(raw);
+        if (parsed.needsMigration) {
+            // Persist stable IDs, enabled state, ordering, and the storage version immediately.
+            // This makes legacy identities stable across process restarts, not just one UI session.
+            save(preferences, parsed.entries);
+            return parsed.entries;
+        }
         synchronized (CACHE) {
             CACHE.put(preferences, new CacheEntry(raw, parsed.entries, parsed.compiled));
         }
@@ -165,21 +171,30 @@ public final class WordReplacements {
     private static ParsedRules parse(String raw) {
         List<Entry> entries = new ArrayList<>();
         if (raw == null || raw.trim().isEmpty()) raw = "[]";
+        boolean needsMigration = false;
+        boolean rootParsed = false;
         try {
             String trimmed = raw.trim();
             JSONArray array;
             if (trimmed.startsWith("[")) {
                 array = new JSONArray(trimmed); // legacy v1
+                needsMigration = true;
             } else {
                 JSONObject root = new JSONObject(trimmed);
+                needsMigration = root.optInt("version", -1) != STORAGE_VERSION;
                 array = root.optJSONArray("entries");
-                if (array == null) array = new JSONArray();
+                if (array == null) {
+                    array = new JSONArray();
+                    needsMigration = true;
+                }
             }
+            rootParsed = true;
             Set<String> usedIds = new HashSet<>();
             for (int index = 0; index < array.length(); index++) {
                 Object value = array.opt(index);
                 if (!(value instanceof JSONObject)) {
                     Log.w(TAG, "Skipping malformed rule at index " + index);
+                    needsMigration = true;
                     continue;
                 }
                 JSONObject object = (JSONObject) value;
@@ -188,19 +203,24 @@ public final class WordReplacements {
                     String to = object.getString("to");
                     if (from.isEmpty()) throw new JSONException("empty source");
                     String id = object.optString("id", "").trim();
-                    if (id.isEmpty() || usedIds.contains(id)) id = UUID.randomUUID().toString();
+                    if (id.isEmpty() || usedIds.contains(id)) {
+                        id = UUID.randomUUID().toString();
+                        needsMigration = true;
+                    }
                     usedIds.add(id);
+                    if (!object.has("enabled")) needsMigration = true;
                     boolean enabled = object.has("enabled") ? object.optBoolean("enabled", true) : true;
                     entries.add(new Entry(id, from, to, enabled));
                 } catch (JSONException | IllegalArgumentException malformed) {
                     Log.w(TAG, "Skipping malformed rule at index " + index, malformed);
+                    needsMigration = true;
                 }
             }
         } catch (JSONException malformedRoot) {
             Log.e(TAG, "Unable to parse replacement rule storage", malformedRoot);
         }
         List<Entry> immutable = Collections.unmodifiableList(entries);
-        return new ParsedRules(immutable, compile(immutable));
+        return new ParsedRules(immutable, compile(immutable), rootParsed && needsMigration);
     }
 
     private static List<Entry> sanitizeEntries(List<Entry> entries) {
@@ -236,9 +256,11 @@ public final class WordReplacements {
     private static final class ParsedRules {
         final List<Entry> entries;
         final CompiledRuleSet compiled;
-        ParsedRules(List<Entry> entries, CompiledRuleSet compiled) {
+        final boolean needsMigration;
+        ParsedRules(List<Entry> entries, CompiledRuleSet compiled, boolean needsMigration) {
             this.entries = entries;
             this.compiled = compiled;
+            this.needsMigration = needsMigration;
         }
     }
 
