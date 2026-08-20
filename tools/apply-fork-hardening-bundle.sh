@@ -4,7 +4,18 @@ set -euo pipefail
 archive="$(mktemp)"
 trap 'rm -f "$archive"' EXIT
 
-cat tools/fork-hardening.bundle.* | base64 --decode > "$archive"
+cat \
+  tools/fork-hardening.bundle.00.00 \
+  tools/fork-hardening.bundle.00.01 \
+  tools/fork-hardening.bundle.00.02 \
+  tools/fork-hardening.bundle.00.03 \
+  tools/fork-hardening.bundle.00.04 \
+  tools/fork-hardening.bundle.01 \
+  tools/fork-hardening.bundle.02 \
+  tools/fork-hardening.bundle.03 \
+  tools/fork-hardening.bundle.04 \
+  tools/fork-hardening.bundle.05 \
+  | base64 --decode > "$archive"
 tar -xzf "$archive"
 
 cat > .github/workflows/build.yml <<'CLEAN_WORKFLOW'
