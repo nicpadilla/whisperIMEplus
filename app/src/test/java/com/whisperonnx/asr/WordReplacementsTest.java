@@ -47,14 +47,17 @@ public class WordReplacementsTest {
                 "МИР мирный New York", entries));
     }
 
-    @Test public void malformedLegacyStorageRecoversValidEntriesAndMigratesOnSave() {
+    @Test public void malformedLegacyStorageRecoversValidEntriesAndMigratesOnLoad() {
         preferences.edit().putString("wordReplacements",
                 "[{\"from\":\"Saira\",\"to\":\"Sayra\"},{\"from\":7},{\"bad\":true}]").commit();
         List<WordReplacements.Entry> loaded = WordReplacements.load(preferences);
         assertEquals(1, loaded.size());
         assertEquals("Sayra", WordReplacements.apply(preferences, "Saira"));
-        WordReplacements.save(preferences, loaded);
-        assertTrue(preferences.getString("wordReplacements", "").contains("\"version\":2"));
+        String migrated = preferences.getString("wordReplacements", "");
+        assertTrue(migrated.contains("\"version\":2"));
+        assertTrue(migrated.contains(loaded.get(0).id));
+        // Reloading from persisted v2 data keeps the same stable rule identity.
+        assertEquals(loaded.get(0).id, WordReplacements.load(preferences).get(0).id);
         assertEquals("Sayra", WordReplacements.apply(preferences, "Saira"));
     }
 
