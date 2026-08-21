@@ -19,8 +19,8 @@ android {
     namespace 'com.whisperonnx'
     compileSdk 35
 
-    lintOptions {
-        disable 'MissingTranslation'
+    lint {
+        disable += 'MissingTranslation'
     }
 
     testOptions {
