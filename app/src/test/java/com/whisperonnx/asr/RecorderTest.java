@@ -4,6 +4,9 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.robolectric.RobolectricTestRunner;
+import org.robolectric.annotation.Config;
 
 import java.util.Collections;
 import java.util.List;
@@ -12,6 +15,8 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
+@RunWith(RobolectricTestRunner.class)
+@Config(sdk = 28)
 public class RecorderTest {
     @Test public void stopIsNonBlockingAndProducesOneCompletion() throws Exception {
         Recorder.CaptureBackend backend = (request, control, observer) -> {
