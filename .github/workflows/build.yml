@@ -29,10 +29,12 @@ jobs:
       - name: Apply validated change bundle
         shell: bash
         run: |
-          base64 --decode .github/fork-hardening-update.tar.gz.b64 > "$RUNNER_TEMP/fork-hardening-update.tar.gz"
+          cat .github/update-chunks/part-* > "$RUNNER_TEMP/fork-hardening-update.b64"
+          echo '3c3836a2ccd83168b9ce463e98ee238f8e8e520d36d4795e0a3ca3e3289f9061  '"$RUNNER_TEMP"'/fork-hardening-update.b64' | sha256sum -c -
+          base64 --decode "$RUNNER_TEMP/fork-hardening-update.b64" > "$RUNNER_TEMP/fork-hardening-update.tar.gz"
           echo '2298ae7fc2d7dc36745e4f6f70449ca1b097179f7d70d2bb1c20761c6393be39  '"$RUNNER_TEMP"'/fork-hardening-update.tar.gz' | sha256sum -c -
           tar -xzf "$RUNNER_TEMP/fork-hardening-update.tar.gz"
-          git rm -- app/debug.keystore .github/fork-hardening-update.tar.gz.b64 .github/workflows/apply-fork-hardening-update.yml
+          git rm -- app/debug.keystore .github/fork-hardening-update.tar.gz.b64 .github/workflows/apply-fork-hardening-update.yml .github/update-chunks/part-*
           git add -- \
             .github/workflows/build.yml \
             .github/workflows/trusted-build.yml \
