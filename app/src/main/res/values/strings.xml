@@ -4,6 +4,10 @@
     <string name="voice_input">Whisper+ Voice Input</string>
     <string name="need_record_audio_permission">RECORD_AUDIO permission is not granted</string>
     <string name="download_model">Download Model</string>
+    <string name="model_download_failed">No application is available to download the model.</string>
+    <string name="model_installing">Installing model…</string>
+    <string name="model_install_complete">Model installed successfully.</string>
+    <string name="model_install_failed">Model installation failed. The selected archive is invalid or incomplete.</string>
     <string name="status">Status:</string>
     <string name="append">Append:</string>
     <string name="translate">Translate to English:</string>
