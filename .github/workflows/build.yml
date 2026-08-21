@@ -14,80 +14,6 @@ permissions:
   contents: read
 
 jobs:
-  apply-staged-update:
-    if: github.event_name == 'pull_request' && github.head_ref == 'codex/fork-hardening'
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    permissions:
-      contents: write
-    steps:
-      - name: Check out PR branch
-        uses: actions/checkout@v4
-        with:
-          ref: codex/fork-hardening
-
-      - name: Apply validated code bundle
-        shell: bash
-        run: |
-          cat \
-            .github/update-chunks/part-00a \
-            .github/update-chunks/part-00b \
-            .github/update-chunks/part-00c \
-            .github/update-chunks/part-00d \
-            .github/update-chunks/part-01 \
-            .github/update-chunks/part-02 \
-            .github/update-chunks/part-03 \
-            .github/update-chunks/part-04 \
-            .github/update-chunks/part-05 \
-            .github/update-chunks/part-06 \
-            .github/update-chunks/part-07 \
-            .github/update-chunks/part-08 \
-            .github/update-chunks/part-09 \
-            .github/update-chunks/part-10 \
-            > "$RUNNER_TEMP/fork-hardening-update.b64"
-          echo '3c3836a2ccd83168b9ce463e98ee238f8e8e520d36d4795e0a3ca3e3289f9061  '"$RUNNER_TEMP"'/fork-hardening-update.b64' | sha256sum -c -
-          base64 --decode "$RUNNER_TEMP/fork-hardening-update.b64" > "$RUNNER_TEMP/fork-hardening-update.tar.gz"
-          echo '2298ae7fc2d7dc36745e4f6f70449ca1b097179f7d70d2bb1c20761c6393be39  '"$RUNNER_TEMP"'/fork-hardening-update.tar.gz' | sha256sum -c -
-          tar -xzf "$RUNNER_TEMP/fork-hardening-update.tar.gz"
-
-          # The GitHub Actions token may update source files but not workflow files.
-          # Restore workflow paths here; the connected GitHub integration applies them afterward.
-          git restore --source=HEAD -- .github/workflows/build.yml
-          rm -f .github/workflows/trusted-build.yml
-
-          git rm -- app/debug.keystore .github/fork-hardening-update.tar.gz.b64 .github/update-chunks/part-*
-          git add -- \
-            .gitignore \
-            README.md \
-            app/build.gradle \
-            app/src/main/AndroidManifest.xml \
-            app/src/main/java/com/whisperonnx/MainActivity.java \
-            app/src/main/java/com/whisperonnx/WhisperInputMethodService.java \
-            app/src/main/java/com/whisperonnx/asr/BluetoothAudioRouter.java \
-            app/src/main/java/com/whisperonnx/asr/Recorder.java \
-            app/src/main/java/com/whisperonnx/asr/RecorderEvent.java \
-            app/src/main/java/com/whisperonnx/asr/RecordingInteractionController.java \
-            app/src/main/java/com/whisperonnx/utils/WordReplacementAdapter.java \
-            app/src/main/res/layout/activity_download.xml \
-            app/src/main/res/layout/activity_main.xml \
-            app/src/main/res/layout/activity_recognize.xml \
-            app/src/main/res/layout/item_word_replacement.xml \
-            app/src/main/res/layout/voice_service.xml \
-            app/src/main/res/menu/activity_main.xml \
-            app/src/main/res/values/strings.xml \
-            app/src/test/java/com/whisperonnx/asr/BluetoothAudioRouterTest.java \
-            app/src/test/java/com/whisperonnx/asr/RecorderTest.java \
-            docs/ci-signing.md
-          git diff --cached --check
-
-      - name: Commit and push code changes
-        shell: bash
-        run: |
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git commit -m 'feat: finish Bluetooth routing and prepare secure signing'
-          git push origin HEAD:codex/fork-hardening
-
   verify:
     runs-on: ubuntu-latest
     timeout-minutes: 45
@@ -105,7 +31,33 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Build debug APK
+      - name: Reject committed signing material
+        shell: bash
+        run: |
+          tracked="$(git ls-files '*.keystore' '*.jks')"
+          if [ -n "$tracked" ]; then
+            echo "::error::Signing material is tracked in git:"
+            printf '%s\n' "$tracked"
+            exit 1
+          fi
+
+      - name: Verify optional CI signing configuration
+        shell: bash
+        run: |
+          test_key="$RUNNER_TEMP/signing-smoke-test.keystore"
+          keytool -genkeypair -noprompt \
+            -keystore "$test_key" -storepass smoke-store \
+            -alias smoke-key -keypass smoke-key-pass \
+            -keyalg RSA -keysize 2048 -validity 2 \
+            -dname "CN=CI Signing Smoke Test, OU=CI, O=Whisper Fork, C=US"
+          CI_SIGNING_KEYSTORE_PATH="$test_key" \
+          CI_SIGNING_STORE_PASSWORD="smoke-store" \
+          CI_SIGNING_KEY_ALIAS="smoke-key" \
+          CI_SIGNING_KEY_PASSWORD="smoke-key-pass" \
+            ./gradlew --stacktrace :app:validateSigningDebug
+          rm -f "$test_key"
+
+      - name: Build untrusted debug APK
         run: ./gradlew --stacktrace assembleDebug
 
       - name: Run unit tests
@@ -126,11 +78,11 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
-      - name: Upload debug APK
+      - name: Upload untrusted debug APK
         uses: actions/upload-artifact@v4
         if: success()
         with:
-          name: debug-apk-${{ github.sha }}
+          name: untrusted-debug-apk-${{ github.sha }}
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 14
