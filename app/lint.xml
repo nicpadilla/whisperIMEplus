@@ -9,4 +9,14 @@
     <issue id="NewApi">
         <ignore path="src/main/java/com/whisperonnx/asr/BluetoothAudioRouter.java" />
     </issue>
+
+    <!-- InputMethodService creates the IME root view; it has no parent ViewGroup to pass. -->
+    <issue id="InflateParams">
+        <ignore path="src/main/java/com/whisperonnx/WhisperInputMethodService.java" />
+    </issue>
+
+    <!-- voice_service.xml is an IME view, not an activity layout; the inferred theme is false. -->
+    <issue id="Overdraw">
+        <ignore path="src/main/res/layout/voice_service.xml" />
+    </issue>
 </lint>
