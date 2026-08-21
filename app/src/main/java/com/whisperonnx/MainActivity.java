@@ -222,12 +222,11 @@ public class MainActivity extends AppCompatActivity {
             }
             tvResult.append(text);
             long elapsed = System.currentTimeMillis() - processingStartMs;
-            tvStatus.setText(getString(R.string.processing_done) + elapsed + "\u2009ms\n"
-                    + getString(R.string.language) + " "
-                    + new Locale(result.getLanguage()).getDisplayLanguage() + " "
-                    + (result.getTask() == ACTION_TRANSCRIBE
-                    ? getString(R.string.mode_transcription)
-                    : getString(R.string.mode_translation)));
+            tvStatus.setText(getString(R.string.processing_result_summary, elapsed,
+                    new Locale(result.getLanguage()).getDisplayLanguage(),
+                    result.getTask() == ACTION_TRANSCRIBE
+                            ? getString(R.string.mode_transcription)
+                            : getString(R.string.mode_translation)));
             if (modeTTS.isChecked() && tts != null) {
                 tts.speak(result.getResult(), TextToSpeech.QUEUE_FLUSH, null, null);
             }
@@ -243,7 +242,7 @@ public class MainActivity extends AppCompatActivity {
         switch (state) {
             case RECORDING_HELD:
                 btnRecord.setBackgroundResource(R.drawable.rounded_button_background_pressed);
-                tvStatus.setText(getString(R.string.record_button) + "…");
+                tvStatus.setText(R.string.recording_status);
                 processingBar.setIndeterminate(false);
                 break;
             case RECORDING_TOGGLED:

@@ -1,3 +1,7 @@
 /.idea/
 /app/build/
 /.gradle/
+
+# Signing material must never be committed.
+*.keystore
+*.jks

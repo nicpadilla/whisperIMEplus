@@ -3,6 +3,18 @@ plugins {
     id 'org.jetbrains.kotlin.android'
 }
 
+def ciSigningValues = [
+        System.getenv("CI_SIGNING_KEYSTORE_PATH"),
+        System.getenv("CI_SIGNING_STORE_PASSWORD"),
+        System.getenv("CI_SIGNING_KEY_ALIAS"),
+        System.getenv("CI_SIGNING_KEY_PASSWORD")
+]
+def anyCiSigningValue = ciSigningValues.any { it != null && !it.trim().isEmpty() }
+def ciSigningConfigured = ciSigningValues.every { it != null && !it.trim().isEmpty() }
+if (anyCiSigningValue && !ciSigningConfigured) {
+    throw new GradleException("CI signing configuration is incomplete")
+}
+
 android {
     namespace 'com.whisperonnx'
     compileSdk 35
@@ -18,11 +30,13 @@ android {
     }
 
     signingConfigs {
-        debug {
-            storeFile file('debug.keystore')
-            storePassword 'android'
-            keyAlias 'debugkey'
-            keyPassword 'android'
+        if (ciSigningConfigured) {
+            ci {
+                storeFile file(System.getenv("CI_SIGNING_KEYSTORE_PATH"))
+                storePassword System.getenv("CI_SIGNING_STORE_PASSWORD")
+                keyAlias System.getenv("CI_SIGNING_KEY_ALIAS")
+                keyPassword System.getenv("CI_SIGNING_KEY_PASSWORD")
+            }
         }
     }
 
@@ -41,7 +55,7 @@ android {
 
     buildTypes {
         debug {
-            signingConfig signingConfigs.debug
+            if (ciSigningConfigured) signingConfig signingConfigs.ci
         }
         release {
             minifyEnabled false

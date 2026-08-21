@@ -10,7 +10,8 @@
     <CheckBox
         android:id="@+id/replacement_enabled"
         android:layout_width="wrap_content"
-        android:layout_height="wrap_content" />
+        android:layout_height="wrap_content"
+        android:contentDescription="@string/replacement_enable_action" />
 
     <TextView
         android:id="@+id/tv_replacement_entry"
@@ -27,26 +28,30 @@
         android:layout_width="40dp"
         android:layout_height="40dp"
         android:background="@null"
-        android:src="@android:drawable/ic_menu_edit" />
+        android:src="@android:drawable/ic_menu_edit"
+        android:contentDescription="@string/replacement_edit_action" />
 
     <ImageButton
         android:id="@+id/btn_move_replacement_up"
         android:layout_width="40dp"
         android:layout_height="40dp"
         android:background="@null"
-        android:src="@android:drawable/arrow_up_float" />
+        android:src="@android:drawable/arrow_up_float"
+        android:contentDescription="@string/replacement_move_up_action" />
 
     <ImageButton
         android:id="@+id/btn_move_replacement_down"
         android:layout_width="40dp"
         android:layout_height="40dp"
         android:background="@null"
-        android:src="@android:drawable/arrow_down_float" />
+        android:src="@android:drawable/arrow_down_float"
+        android:contentDescription="@string/replacement_move_down_action" />
 
     <ImageButton
         android:id="@+id/btn_delete_replacement"
         android:layout_width="40dp"
         android:layout_height="40dp"
         android:background="@null"
-        android:src="@android:drawable/ic_menu_delete" />
+        android:src="@android:drawable/ic_menu_delete"
+        android:contentDescription="@string/replacement_delete_action" />
 </LinearLayout>

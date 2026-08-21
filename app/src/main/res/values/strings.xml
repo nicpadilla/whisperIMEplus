@@ -59,4 +59,13 @@
     <string name="replacement_delete_content_description">Delete replacement for %1$s</string>
     <string name="replacement_move_up_content_description">Move replacement for %1$s up</string>
     <string name="replacement_move_down_content_description">Move replacement for %1$s down</string>
+    <string name="recording_status">Recording…</string>
+    <string name="processing_result_summary">Processing done in\u2009%1$d\u2009ms\nLanguage: %2$s %3$s</string>
+    <string name="replacement_entry_format">%1$s  →  %2$s</string>
+    <string name="replacement_enable_action">Enable replacement</string>
+    <string name="replacement_edit_action">Edit replacement</string>
+    <string name="replacement_move_up_action">Move replacement up</string>
+    <string name="replacement_move_down_action">Move replacement down</string>
+    <string name="replacement_delete_action">Delete replacement</string>
+
 </resources>

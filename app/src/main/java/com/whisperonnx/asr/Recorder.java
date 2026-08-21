@@ -5,7 +5,6 @@ import android.content.Context;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.media.AudioFormat;
-import android.media.AudioManager;
 import android.media.AudioRecord;
 import android.media.MediaRecorder;
 import android.os.SystemClock;
@@ -45,6 +44,7 @@ public final class Recorder implements AutoCloseable {
 
     interface CaptureObserver {
         void onSpeechStarted();
+        void onRouteChanged(String requestedRoute, String actualRoute);
     }
 
     static final class CaptureRequest {
@@ -165,7 +165,17 @@ public final class Recorder implements AutoCloseable {
             RecordingData recording = captureBackend.capture(
                     new CaptureRequest(request.requestId, request.autoStopOnSilence),
                     request.control,
-                    () -> emitNonTerminal(request, RecorderEvent.speechStarted(request.requestId)));
+                    new CaptureObserver() {
+                        @Override public void onSpeechStarted() {
+                            emitNonTerminal(request, RecorderEvent.speechStarted(request.requestId));
+                        }
+
+                        @Override public void onRouteChanged(String requestedRoute,
+                                                             String actualRoute) {
+                            emitNonTerminal(request, RecorderEvent.routeChanged(
+                                    request.requestId, requestedRoute, actualRoute));
+                        }
+                    });
             if (request.control.isCancelled()) {
                 finish(request, RecorderEvent.cancelled(request.requestId));
             } else if (recording == null || recording.getValidByteCount() < MIN_VALID_AUDIO_BYTES) {
@@ -207,6 +217,10 @@ public final class Recorder implements AutoCloseable {
     }
 
     private void emit(RecorderEvent event) {
+        if (event != null && event.getType() == RecorderEvent.Type.ROUTE_CHANGED) {
+            Log.i(TAG, "Audio route request=" + event.getRequestedRoute()
+                    + ", actual=" + event.getActualRoute());
+        }
         RecorderListener current = listener;
         if (current != null && !closed) current.onRecorderEvent(event);
     }
@@ -253,10 +267,12 @@ public final class Recorder implements AutoCloseable {
     private static final class AndroidCaptureBackend implements CaptureBackend {
         private final Context context;
         private final SharedPreferences preferences;
+        private final BluetoothAudioRouter audioRouter;
 
         AndroidCaptureBackend(Context context) {
             this.context = context;
             this.preferences = PreferenceManager.getDefaultSharedPreferences(context);
+            this.audioRouter = new BluetoothAudioRouter(context);
         }
 
         @Override
@@ -276,18 +292,17 @@ public final class Recorder implements AutoCloseable {
             platformBufferSize = Math.max(platformBufferSize, VAD_FRAME_BYTES);
 
             boolean bluetoothRequested = preferences.getBoolean("bluetooth", false);
-            AudioManager audioManager = (AudioManager) context.getSystemService(Context.AUDIO_SERVICE);
             AudioRecord audioRecord = null;
             VadWebRTC vad = null;
-            boolean scoStarted = false;
+            BluetoothAudioRouter.RouteSession routeSession = null;
             long captureStartMs = SystemClock.elapsedRealtime();
             try {
-                if (bluetoothRequested && audioManager != null) {
-                    // Full version-aware route confirmation is tracked separately in issue #9.
-                    audioManager.startBluetoothSco();
-                    audioManager.setBluetoothScoOn(true);
-                    scoStarted = true;
-                }
+                if (control.shouldStop()) return null;
+                routeSession = audioRouter.open(bluetoothRequested,
+                        BluetoothAudioRouter.DEFAULT_ROUTE_TIMEOUT_MS, control::shouldStop);
+                observer.onRouteChanged(routeSession.getRequestedRoute(),
+                        routeSession.getActualRoute());
+                if (control.isCancelled()) return null;
 
                 try {
                     audioRecord = new AudioRecord.Builder()
@@ -336,6 +351,10 @@ public final class Recorder implements AutoCloseable {
                 int zeroReads = 0;
 
                 while (!control.shouldStop() && output.size() < maxBytes) {
+                    if (routeSession.refresh()) {
+                        observer.onRouteChanged(routeSession.getRequestedRoute(),
+                                routeSession.getActualRoute());
+                    }
                     int bytesRequested = Math.min(readBuffer.length, maxBytes - output.size());
                     int bytesRead = audioRecord.read(readBuffer, 0, bytesRequested);
                     if (bytesRead > 0) {
@@ -370,12 +389,11 @@ public final class Recorder implements AutoCloseable {
 
                 if (control.isCancelled()) return null;
                 long durationMs = SystemClock.elapsedRealtime() - captureStartMs;
-                String requestedRoute = bluetoothRequested ? "bluetooth" : "default";
-                String actualRoute = bluetoothRequested && scoStarted
-                        ? "bluetooth-requested-unconfirmed" : "default";
+                routeSession.refresh();
                 return RecordingData.takeOwnership(output.ownedBuffer(), output.size(),
                         SAMPLE_RATE_HZ, CHANNEL_COUNT, BYTES_PER_SAMPLE, audioEncoding,
-                        boundaries, durationMs, requestedRoute, actualRoute);
+                        boundaries, durationMs, routeSession.getRequestedRoute(),
+                        routeSession.getActualRoute());
             } finally {
                 if (vad != null) {
                     try { vad.close(); } catch (RuntimeException e) {
@@ -394,16 +412,11 @@ public final class Recorder implements AutoCloseable {
                         Log.w(TAG, "AudioRecord release failed", e);
                     }
                 }
-                if (scoStarted && audioManager != null) {
-                    try {
-                        audioManager.stopBluetoothSco();
-                        audioManager.setBluetoothScoOn(false);
-                    } catch (RuntimeException e) {
-                        Log.w(TAG, "Bluetooth route cleanup failed", e);
-                    }
-                }
+                if (routeSession != null) routeSession.close();
             }
         }
+
+        @Override public void close() { audioRouter.close(); }
     }
 
     /** Exposes the owned backing array only at the one-time RecordingData handoff. */

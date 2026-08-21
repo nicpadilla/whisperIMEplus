@@ -98,7 +98,8 @@ public final class WordReplacementAdapter extends
         }
 
         void bind(WordReplacements.Entry entry, int position, int count, Listener listener) {
-            entryText.setText(entry.from + "  →  " + entry.to);
+            entryText.setText(itemView.getContext().getString(
+                    R.string.replacement_entry_format, entry.from, entry.to));
             enabled.setOnCheckedChangeListener(null);
             enabled.setChecked(entry.enabled);
             enabled.setContentDescription(itemView.getContext().getString(

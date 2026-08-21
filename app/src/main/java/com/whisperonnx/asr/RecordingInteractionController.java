@@ -134,6 +134,7 @@ public final class RecordingInteractionController {
         if (event.getRequestId() != activeRecordingId) return;
         switch (event.getType()) {
             case CAPTURE_STARTED:
+            case ROUTE_CHANGED:
             case SPEECH_STARTED:
                 break;
             case COMPLETED:

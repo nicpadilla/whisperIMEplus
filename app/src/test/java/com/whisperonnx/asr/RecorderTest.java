@@ -79,6 +79,32 @@ public class RecorderTest {
         recorder.close();
     }
 
+    @Test public void routeChangesAreObservableAndRetainedInCompletion() throws Exception {
+        Recorder.CaptureBackend backend = (request, control, observer) -> {
+            observer.onRouteChanged("bluetooth", "bluetooth-sco");
+            return RecordingData.copyOf(new byte[6400], 6400, 16000, 1, 2, 2,
+                    Collections.emptyList(), 200L, "bluetooth", "bluetooth-sco");
+        };
+        Recorder recorder = new Recorder(backend, Executors.newSingleThreadExecutor());
+        List<RecorderEvent> events = new CopyOnWriteArrayList<>();
+        CountDownLatch terminal = new CountDownLatch(1);
+        recorder.setListener(event -> {
+            events.add(event);
+            if (event.isTerminal()) terminal.countDown();
+        });
+
+        recorder.start(false);
+        assertTrue(terminal.await(2, TimeUnit.SECONDS));
+        RecorderEvent route = events.stream()
+                .filter(event -> event.getType() == RecorderEvent.Type.ROUTE_CHANGED)
+                .findFirst().get();
+        assertEquals("bluetooth", route.getRequestedRoute());
+        assertEquals("bluetooth-sco", route.getActualRoute());
+        RecorderEvent completed = events.stream().filter(RecorderEvent::isTerminal).findFirst().get();
+        assertEquals("bluetooth-sco", completed.getRecording().getActualRoute());
+        recorder.close();
+    }
+
     private static RecordingData recording() {
         return RecordingData.copyOf(new byte[6400], 6400, 16000, 1, 2, 2,
                 Collections.emptyList(), 200L, "default", "default");
