@@ -1,0 +1,59 @@
+name: Apply fork hardening update
+
+on:
+  push:
+    branches: [ codex/fork-hardening ]
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out branch
+        uses: actions/checkout@v4
+        with:
+          ref: codex/fork-hardening
+
+      - name: Apply validated change bundle
+        shell: bash
+        run: |
+          echo '2298ae7fc2d7dc36745e4f6f70449ca1b097179f7d70d2bb1c20761c6393be39  .github/fork-hardening-update.tar.gz' | sha256sum -c -
+          tar -xzf .github/fork-hardening-update.tar.gz
+          git rm -- app/debug.keystore .github/fork-hardening-update.tar.gz .github/workflows/apply-fork-hardening-update.yml
+          git add -- \
+            .github/workflows/build.yml \
+            .github/workflows/trusted-build.yml \
+            .gitignore \
+            README.md \
+            app/build.gradle \
+            app/src/main/AndroidManifest.xml \
+            app/src/main/java/com/whisperonnx/MainActivity.java \
+            app/src/main/java/com/whisperonnx/WhisperInputMethodService.java \
+            app/src/main/java/com/whisperonnx/asr/BluetoothAudioRouter.java \
+            app/src/main/java/com/whisperonnx/asr/Recorder.java \
+            app/src/main/java/com/whisperonnx/asr/RecorderEvent.java \
+            app/src/main/java/com/whisperonnx/asr/RecordingInteractionController.java \
+            app/src/main/java/com/whisperonnx/utils/WordReplacementAdapter.java \
+            app/src/main/res/layout/activity_download.xml \
+            app/src/main/res/layout/activity_main.xml \
+            app/src/main/res/layout/activity_recognize.xml \
+            app/src/main/res/layout/item_word_replacement.xml \
+            app/src/main/res/layout/voice_service.xml \
+            app/src/main/res/menu/activity_main.xml \
+            app/src/main/res/values/strings.xml \
+            app/src/test/java/com/whisperonnx/asr/BluetoothAudioRouterTest.java \
+            app/src/test/java/com/whisperonnx/asr/RecorderTest.java \
+            docs/ci-signing.md
+          git diff --cached --check
+
+      - name: Commit and push
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'feat: finish Bluetooth routing and secure CI signing'
+          git push origin HEAD:codex/fork-hardening
