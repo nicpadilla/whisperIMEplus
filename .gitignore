@@ -1,6 +1,7 @@
 /.idea/
 /app/build/
 /.gradle/
+/local.properties
 
 # Signing material must never be committed.
 *.keystore
