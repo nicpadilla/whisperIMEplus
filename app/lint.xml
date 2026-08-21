@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<lint>
+    <!--
+      BluetoothAudioRouter gates its API 31 implementation through an injected Platform
+      API level so both modern and legacy paths can be tested on the JVM. Lint cannot
+      infer that custom guard, but every framework API call remains isolated behind the
+      API 31 platform implementation.
+    -->
+    <issue id="NewApi">
+        <ignore path="src/main/java/com/whisperonnx/asr/BluetoothAudioRouter.java" />
+    </issue>
+</lint>
