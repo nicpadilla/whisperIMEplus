@@ -94,7 +94,7 @@ dependencies {
 
     implementation 'com.microsoft.onnxruntime:onnxruntime-android:1.19.0'
     implementation 'com.microsoft.onnxruntime:onnxruntime-extensions-android:0.12.4'
-    implementation 'com.github.woheller69:FreeDroidWarn:+'
+    implementation 'com.github.woheller69:FreeDroidWarn:1c187fcc64760832ed3edc3f96b02c5ceaf82e8a'
 
     testImplementation 'junit:junit:4.13.2'
     testImplementation 'org.robolectric:robolectric:4.11.1'
