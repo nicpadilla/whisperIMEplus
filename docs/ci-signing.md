@@ -18,11 +18,17 @@ Do not reuse `app/debug.keystore` from repository history. That key was public a
 Example, run locally with passwords and identity values of your choice:
 
 ```bash
-keytool -genkeypair -v -keystore whisper-ci-signing.keystore -alias whisper-ci -keyalg RSA -keysize 3072 -validity 10000
+keytool -genkeypair -v -storetype JKS -keystore whisper-ci-signing.keystore -alias whisper-ci -keyalg RSA -keysize 3072 -validity 10000
 base64 -w 0 whisper-ci-signing.keystore > whisper-ci-signing.keystore.b64
 ```
 
 On macOS, use `base64 < whisper-ci-signing.keystore | tr -d '\n'` for the second command.
+
+On Windows PowerShell, create the one-line Base64 file with:
+
+```powershell
+[Convert]::ToBase64String([IO.File]::ReadAllBytes("whisper-ci-signing.keystore")) | Set-Content -NoNewline "whisper-ci-signing.keystore.b64"
+```
 
 Add the Base64 text and passwords under **Repository settings → Secrets and variables → Actions**. Never paste the keystore or passwords into an issue, commit, workflow log, or pull request.
 
