@@ -2,8 +2,12 @@
 <resources>
     <string name="app_name" translatable="false">Whisper+</string>
     <string name="voice_input">Whisper+ Voice Input</string>
-    <string name="need_record_audio_permission">"RECORD_AUDIO permission is not granted"</string>
+    <string name="need_record_audio_permission">RECORD_AUDIO permission is not granted</string>
     <string name="download_model">Download Model</string>
+    <string name="model_download_failed">No application is available to download the model.</string>
+    <string name="model_installing">Installing model…</string>
+    <string name="model_install_complete">Model installed successfully.</string>
+    <string name="model_install_failed">Model installation failed. The selected archive is invalid or incomplete.</string>
     <string name="status">Status:</string>
     <string name="append">Append:</string>
     <string name="translate">Translate to English:</string>
@@ -42,12 +46,30 @@
     <string name="lang2">Language 2</string>
     <string name="setting_bluetooth">Use Bluetooth devices</string>
     <string name="settings_max_recording_duration">Max recording duration (seconds)</string>
+    <string name="recording_tap_to_stop">Recording — tap the microphone to stop</string>
+    <string name="finishing_recording">Finishing recording…</string>
     <string name="settings_word_replacements">Word Replacements</string>
-    <string name="replacement_add">Add</string>
-    <string name="replacement_from">From (misheard word)</string>
-    <string name="replacement_to">To (correct word)</string>
+    <string name="replacement_manage">Manage word replacements</string>
+    <string name="replacement_add">Add replacement</string>
+    <string name="replacement_from">From (misheard word or phrase)</string>
+    <string name="replacement_to">To (correct word or phrase)</string>
     <string name="replacement_from_hint">e.g. Saira</string>
     <string name="replacement_to_hint">e.g. Sayra</string>
     <string name="replacement_add_title">Add Word Replacement</string>
+    <string name="replacement_edit_title">Edit Word Replacement</string>
+    <string name="replacement_empty">No replacement rules yet.</string>
+    <string name="replacement_enabled_content_description">Enable replacement for %1$s</string>
+    <string name="replacement_edit_content_description">Edit replacement for %1$s</string>
+    <string name="replacement_delete_content_description">Delete replacement for %1$s</string>
+    <string name="replacement_move_up_content_description">Move replacement for %1$s up</string>
+    <string name="replacement_move_down_content_description">Move replacement for %1$s down</string>
+    <string name="recording_status">Recording…</string>
+    <string name="processing_result_summary">Processing done in\u2009%1$d\u2009ms\nLanguage: %2$s %3$s</string>
+    <string name="replacement_entry_format">%1$s  →  %2$s</string>
+    <string name="replacement_enable_action">Enable replacement</string>
+    <string name="replacement_edit_action">Edit replacement</string>
+    <string name="replacement_move_up_action">Move replacement up</string>
+    <string name="replacement_move_down_action">Move replacement down</string>
+    <string name="replacement_delete_action">Delete replacement</string>
 
 </resources>
