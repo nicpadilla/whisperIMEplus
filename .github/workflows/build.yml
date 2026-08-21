@@ -52,6 +52,19 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
+      - name: Package source snapshot
+        if: always()
+        run: tar --exclude=.git --exclude=.gradle --exclude=app/build -czf source-snapshot.tar.gz .
+
+      - name: Upload source snapshot
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: source-snapshot-${{ github.sha }}
+          path: source-snapshot.tar.gz
+          if-no-files-found: error
+          retention-days: 1
+
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
         if: success()
